@@ -82,6 +82,10 @@ export interface ExportConfig {
 
 export type ActiveElement = 'media' | 'text' | 'gap' | 'export';
 
+export interface SelectedElement {
+    id: string;
+    type: 'media' | 'text';
+}
 
 export interface ProjectState {
     id: string;
@@ -97,8 +101,7 @@ export interface ProjectState {
     enableMarkerTracking: boolean;
     isSnappingEnabled: boolean;
     activeSection: ActiveElement;
-    activeElement: ActiveElement | null;
-    activeElementIndex: number;
+    activeElements: SelectedElement[];
     activeGap: { start: number, end: number, trackType: 'video' | 'audio' | 'image' | 'text' } | null;
     projectName: string;
     createdAt: string;

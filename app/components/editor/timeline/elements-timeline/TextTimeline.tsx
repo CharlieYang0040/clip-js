@@ -1,22 +1,22 @@
-import React, { useRef, useCallback, useMemo } from "react";
-import Moveable, { OnScale, OnDrag, OnResize, OnRotate } from "react-moveable";
+import React, { useRef, useCallback, useMemo, useState } from "react";
+import Moveable from "react-moveable";
 import { useAppSelector } from "@/app/store";
-import { setActiveElement, setActiveElementIndex, setTextElements, updateTextElements_INTERNAL, setActiveGap } from "@/app/store/slices/projectSlice";
-import { memo, useEffect, useState } from "react";
+import { setTextElements, setActiveGap, toggleActiveElement, resetActiveElements } from "@/app/store/slices/projectSlice";
+import { memo, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
-import Header from "../Header";
 import { MediaFile, TextElement } from "@/app/types";
-import { debounce, throttle } from "lodash";
+import { debounce } from "lodash";
 
-const SNAP_THRESHOLD = 5; // in pixels
+const SNAP_THRESHOLD = 15; // in pixels
 const MIN_DURATION = 0.1;
 
 export default function TextTimeline() {
     const targetRefs = useRef<Record<string, HTMLDivElement | null>>({});
-    const { mediaFiles, textElements, activeElement, activeElementIndex, timelineZoom, isSnappingEnabled, activeGap } = useAppSelector((state) => state.projectState);
+    const { mediaFiles, textElements, activeElements, timelineZoom, isSnappingEnabled, currentTime, activeGap } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const moveableRef = useRef<Record<string, Moveable | null>>({});
+    const [dragStates, setDragStates] = useState<Record<string, { startX: number, startLeft: number }>>({});
 
     const textElementsRef = useRef(textElements);
     useEffect(() => {
@@ -40,168 +40,59 @@ export default function TextTimeline() {
         return calculatedGaps;
     }, [sortedTextElements]);
 
-    const getSnapPoints = useCallback((excludeId: string) => {
+    const verticalGuidelines = useMemo(() => {
         if (!isSnappingEnabled) return [];
-        const points: number[] = [];
+    
+        const points: number[] = [0, currentTime * timelineZoom];
+        const draggedIds = new Set(activeElements.map(e => e.id));
+    
         mediaFiles.forEach(clip => {
-            points.push(clip.positionStart, clip.positionEnd);
+            if (!draggedIds.has(clip.id)) {
+                points.push(clip.positionStart * timelineZoom, clip.positionEnd * timelineZoom);
+            }
         });
+    
         textElements.forEach(text => {
-            if (text.id !== excludeId) {
-                points.push(text.positionStart, text.positionEnd);
+            if (!draggedIds.has(text.id)) {
+                points.push(text.positionStart * timelineZoom, text.positionEnd * timelineZoom);
             }
         });
-        return points;
-    }, [mediaFiles, textElements, isSnappingEnabled]);
-
-    const getSnapPosition = useCallback((position: number, snapPoints: number[]) => {
-        if (!isSnappingEnabled) return position;
-        for (const point of snapPoints) {
-            if (Math.abs(position - (point * timelineZoom)) < SNAP_THRESHOLD) {
-                return point * timelineZoom;
-            }
-        }
-        return position;
-    }, [timelineZoom, isSnappingEnabled]);
-
-
-    const onUpdateText = useMemo(() =>
-        throttle((id: string, updates: Partial<TextElement>) => {
-            const currentFiles = textElementsRef.current;
-            const updated = currentFiles.map(text =>
-                text.id === id ? { ...text, ...updates } : text
-            );
-            dispatch(updateTextElements_INTERNAL(updated));
-        }, 100), [dispatch]
-    );
+    
+        return Array.from(new Set(points));
+    }, [isSnappingEnabled, currentTime, timelineZoom, mediaFiles, textElements, activeElements]);
 
     const finalUpdateText = useMemo(() =>
-        debounce((id: string, updates: Partial<TextElement>) => {
-            const currentFiles = textElementsRef.current;
-            const updated = currentFiles.map(text =>
-                text.id === id ? { ...text, ...updates } : text
-            );
-            dispatch(setTextElements(updated));
+        debounce((updates: { id: string, data: Partial<TextElement> }[]) => {
+            const currentElements = textElementsRef.current;
+            const updatedElements = currentElements.map(element => {
+                const update = updates.find(u => u.id === element.id);
+                return update ? { ...element, ...update.data } : element;
+            });
+            dispatch(setTextElements(updatedElements));
         }, 50), [dispatch]
     );
 
-    const handleClick = (element: string, index: number | string) => {
-        if (element === 'text') {
-            dispatch(setActiveElement('text') as any);
-            const actualIndex = textElements.findIndex(clip => clip.id === index as unknown as string);
-            dispatch(setActiveElementIndex(actualIndex));
-        }
+    const handleClick = (e: React.MouseEvent, clip: TextElement) => {
+        e.stopPropagation();
+        dispatch(toggleActiveElement({
+            element: { id: clip.id, type: 'text' },
+            metaKey: e.metaKey || e.ctrlKey,
+        }));
     };
 
     const handleGapClick = (gap: { start: number, end: number }, e: React.MouseEvent) => {
         e.stopPropagation();
-        dispatch(setActiveElement('gap'));
+        dispatch(resetActiveElements());
         dispatch(setActiveGap({ ...gap, trackType: 'text' }));
     };
 
-    const handleDrag = (clip: TextElement, target: HTMLElement, left: number) => {
-        if (!isSnappingEnabled) {
-            const constrainedLeft = Math.max(left, 0);
-            const newPositionStart = constrainedLeft / timelineZoom;
-            onUpdateText(clip.id, {
-                positionStart: newPositionStart,
-                positionEnd: (newPositionStart - clip.positionStart) + clip.positionEnd,
-            })
-    
-            target.style.left = `${constrainedLeft}px`;
-            return;
-        }
-
-        const snapPointsPx = getSnapPoints(clip.id).map(p => p * timelineZoom);
-        const durationPx = (clip.positionEnd - clip.positionStart) * timelineZoom;
-
-        const startPosition = left;
-        const endPosition = left + durationPx;
-
-        let snappedLeft = left;
-
-        let minStartDist = SNAP_THRESHOLD;
-        let minEndDist = SNAP_THRESHOLD;
-        let startSnapPos: number | null = null;
-        let endSnapPos: number | null = null;
-
-        for (const point of snapPointsPx) {
-            const startDist = Math.abs(startPosition - point);
-            if (startDist < minStartDist) {
-                minStartDist = startDist;
-                startSnapPos = point;
-            }
-
-            const endDist = Math.abs(endPosition - point);
-            if (endDist < minEndDist) {
-                minEndDist = endDist;
-                endSnapPos = point;
-            }
-        }
-
-        if (startSnapPos !== null && endSnapPos !== null) {
-            if (minStartDist <= minEndDist) {
-                snappedLeft = startSnapPos;
-            } else {
-                snappedLeft = endSnapPos - durationPx;
-            }
-        } else if (startSnapPos !== null) {
-            snappedLeft = startSnapPos;
-        } else if (endSnapPos !== null) {
-            snappedLeft = endSnapPos - durationPx;
-        }
-
-        const constrainedLeft = Math.max(snappedLeft, 0);
-        const newPositionStart = constrainedLeft / timelineZoom;
-        const duration = clip.positionEnd - clip.positionStart;
-        
-        target.style.left = `${constrainedLeft}px`;
-        
-        onUpdateText(clip.id, {
-            positionStart: newPositionStart,
-            positionEnd: newPositionStart + duration,
-        });
-    };
-
-    const handleRightResize = (clip: TextElement, target: HTMLElement, width: number) => {
-        const snapPoints = getSnapPoints(clip.id);
-        const newWidth = getSnapPosition(clip.positionStart * timelineZoom + width, snapPoints.map(p => p * timelineZoom)) - (clip.positionStart * timelineZoom);
-
-        const newDuration = newWidth / timelineZoom;
-        const newPositionEnd = clip.positionStart + Math.max(newDuration, MIN_DURATION);
-
-        onUpdateText(clip.id, {
-            positionEnd: newPositionEnd,
-        })
-        target.style.width = `${newWidth}px`;
-    };
-
-    const handleLeftResize = (clip: TextElement, target: HTMLElement, width: number, delta: number) => {
-        const snapPoints = getSnapPoints(clip.id);
-        const currentLeftPx = clip.positionStart * timelineZoom;
-        let newLeftPx = currentLeftPx + delta;
-
-        newLeftPx = getSnapPosition(newLeftPx, snapPoints.map(p => p * timelineZoom));
-
-        const constrainedLeftPx = Math.max(0, newLeftPx);
-        const newPositionStart = constrainedLeftPx / timelineZoom;
-
-        const maxPositionStart = clip.positionEnd - MIN_DURATION;
-        const constrainedPositionStart = Math.min(newPositionStart, maxPositionStart);
-
-        const newWidth = (clip.positionEnd - constrainedPositionStart) * timelineZoom;
-
-        onUpdateText(clip.id, {
-            positionStart: constrainedPositionStart,
-        });
-
-        target.style.left = `${constrainedPositionStart * timelineZoom}px`;
-        target.style.width = `${newWidth}px`;
-    };
+    const isSelected = (clipId: string) => activeElements.some(el => el.id === clipId);
 
     useEffect(() => {
         for (const clip of textElements) {
-            moveableRef.current[clip.id]?.updateRect();
+            if (targetRefs.current[clip.id]) {
+                moveableRef.current[clip.id]?.updateRect();
+            }
         }
     }, [timelineZoom, textElements]);
 
@@ -210,7 +101,7 @@ export default function TextTimeline() {
             {gaps.map((gap, index) => (
                 <div
                     key={`gap-text-${index}`}
-                    className={`absolute top-0 h-full z-0 ${activeElement === 'gap' && activeGap?.trackType === 'text' && activeGap?.start === gap.start ? 'bg-yellow-500 bg-opacity-30 border-2 border-yellow-500' : 'hover:bg-gray-500 hover:bg-opacity-20'}`}
+                    className={`absolute top-0 h-full z-0 ${activeGap?.trackType === 'text' && activeGap?.start === gap.start ? 'bg-yellow-500 bg-opacity-30 border-2 border-yellow-500' : 'hover:bg-gray-500 hover:bg-opacity-20'}`}
                     style={{
                         left: `${gap.start * timelineZoom}px`,
                         width: `${(gap.end - gap.start) * timelineZoom}px`,
@@ -218,7 +109,7 @@ export default function TextTimeline() {
                     onClick={(e) => handleGapClick(gap, e)}
                 />
             ))}
-            {sortedTextElements.map((clip, index) => (
+            {sortedTextElements.map((clip) => (
                 <div key={clip.id} className="relative z-10">
                     <div
                         key={clip.id}
@@ -227,8 +118,8 @@ export default function TextTimeline() {
                                 targetRefs.current[clip.id] = el;
                             }
                         }}
-                        onClick={(e) => { e.stopPropagation(); handleClick('text', clip.id); }}
-                        className={`absolute border border-gray-500 border-opacity-50 rounded-md top-2 h-12 rounded bg-[#27272A] text-white text-sm flex items-center justify-center cursor-pointer ${activeElement === 'text' && textElements[activeElementIndex]?.id === clip.id ? 'bg-[#3F3F46] border-blue-500' : ''}`}
+                        onClick={(e) => handleClick(e, clip)}
+                        className={`absolute border border-gray-500 border-opacity-50 rounded-md top-2 h-12 rounded bg-[#27272A] text-white text-sm flex items-center justify-center cursor-pointer ${isSelected(clip.id) ? 'bg-[#3F3F46] border-blue-500' : ''}`}
                         style={{
                             left: `${clip.positionStart * timelineZoom}px`,
                             width: `${(clip.positionEnd - clip.positionStart) * timelineZoom}px`,
@@ -245,7 +136,6 @@ export default function TextTimeline() {
                         <span className="truncate text-x">{clip.text}</span>
 
                     </div>
-
                     <Moveable
                         ref={(el: Moveable | null) => {
                             if (el) {
@@ -254,60 +144,113 @@ export default function TextTimeline() {
                         }}
                         target={targetRefs.current[clip.id] || null}
                         container={null}
-                        renderDirections={activeElement === 'text' && textElements[activeElementIndex] && textElements[activeElementIndex].id === clip.id ? ['w', 'e'] : []}
+                        renderDirections={isSelected(clip.id) && activeElements.length === 1 ? ['w', 'e'] : []}
                         draggable={true}
                         throttleDrag={0}
                         rotatable={false}
-                        onDragStart={({ target, clientX, clientY }) => {
-                            handleClick('text', clip.id);
+                        onDragStart={({ target, clientX }) => {
+                            const newDragStates: typeof dragStates = {};
+                            let elementsToDrag = activeElements;
+
+                            // If dragging an unselected item, drag it alone without changing selection
+                            if (!isSelected(clip.id)) {
+                                elementsToDrag = [{id: clip.id, type: "text"}];
+                            }
+                            
+                            elementsToDrag.forEach(el => {
+                                const elRef = targetRefs.current[el.id];
+                                if(elRef) {
+                                    newDragStates[el.id] = { startX: clientX, startLeft: elRef.offsetLeft };
+                                }
+                            });
+                            setDragStates(newDragStates);
                         }}
-                        onDrag={({
-                            target,
-                            left,
-                        }: OnDrag) => {
-                            handleDrag(clip, target as HTMLElement, left);
-                        }}
-                        onDragEnd={({ target, isDrag, clientX, clientY }) => {
-                            const currentLeft = parseFloat((target as HTMLElement).style.left) || 0;
-                            const newPositionStart = currentLeft / timelineZoom;
-                            const duration = clip.positionEnd - clip.positionStart;
-                            finalUpdateText(clip.id, {
-                                positionStart: newPositionStart,
-                                positionEnd: newPositionStart + duration,
+                        onDrag={({ transform }) => {
+                            Object.keys(dragStates).forEach(id => {
+                                const elRef = targetRefs.current[id];
+                                if (elRef) {
+                                    elRef.style.transform = transform;
+                                }
                             });
                         }}
+                        onDragEnd={({ target, isDrag }) => {
+                            if (!isDrag) {
+                                setDragStates({});
+                                return;
+                            }
 
+                            const updates: { id: string, data: Partial<TextElement> }[] = [];
+
+                            Object.keys(dragStates).forEach(id => {
+                                const elRef = targetRefs.current[id];
+                                if (elRef) {
+                                    const transform = new DOMMatrix(getComputedStyle(elRef).transform);
+                                    const newLeft = elRef.offsetLeft + transform.m41;
+                                    
+                                    elRef.style.transform = 'none';
+                                    
+                                    const newPositionStart = newLeft / timelineZoom;
+                                    const originalElement = textElements.find(m => m.id === id);
+                                    if (originalElement) {
+                                        const duration = originalElement.positionEnd - originalElement.positionStart;
+                                        updates.push({
+                                            id: id,
+                                            data: {
+                                                positionStart: newPositionStart,
+                                                positionEnd: newPositionStart + duration,
+                                            }
+                                        });
+                                    }
+                                }
+                            });
+                            
+                            if (updates.length > 0) finalUpdateText(updates);
+                            setDragStates({});
+                        }}
                         resizable={true}
                         throttleResize={0}
-                        onResizeStart={({ target, clientX, clientY }) => {
-                            handleClick('text', clip.id);
-                        }}
-                        onResize={({
-                            target, width,
-                            delta, direction, drag
-                        }: OnResize) => {
-                            if (direction[0] === 1) {
-                                handleRightResize(clip, target as HTMLElement, width);
+                        onResizeStart={({ target }) => {
+                            if (!isSelected(clip.id)) {
+                                dispatch(toggleActiveElement({ element: { id: clip.id, type: 'text' } }));
                             }
-                            else if (direction[0] === -1) {
-                                handleLeftResize(clip, target as HTMLElement, width, drag.delta[0]);
+                            target.style.left = `${clip.positionStart * timelineZoom}px`;
+                            target.style.width = `${(clip.positionEnd - clip.positionStart) * timelineZoom}px`;
+                        }}
+                        onResize={({ target, width, dist, direction }) => {
+                            if (direction[0] === -1) { // left resize
+                                const newLeft = Math.max(0, (clip.positionStart * timelineZoom) + dist[0]);
+                                const newWidth = (clip.positionEnd * timelineZoom) - newLeft;
+                                if (newWidth / timelineZoom >= MIN_DURATION) {
+                                    target.style.left = `${newLeft}px`;
+                                    target.style.width = `${newWidth}px`;
+                                }
+                            } else { // right resize
+                                const newWidth = Math.max(width, MIN_DURATION * timelineZoom);
+                                target.style.width = `${newWidth}px`;
                             }
                         }}
-                        onResizeEnd={({ target, isDrag, clientX, clientY }) => {
-                            const currentLeft = parseFloat((target as HTMLElement).style.left) || 0;
-                            const currentWidth = parseFloat((target as HTMLElement).style.width) || 0;
-                            const newPositionStart = currentLeft / timelineZoom;
-                            const newDuration = currentWidth / timelineZoom;
-                            finalUpdateText(clip.id, {
-                                positionStart: newPositionStart,
-                                positionEnd: newPositionStart + newDuration,
-                            });
+                        onResizeEnd={({ target, isDrag }) => {
+                            if (!isDrag) return;
+                            const newLeft = parseFloat(target.style.left) / timelineZoom;
+                            const newWidth = parseFloat(target.style.width) / timelineZoom;
+                            
+                            finalUpdateText([{
+                                id: clip.id, data: {
+                                    positionStart: newLeft,
+                                    positionEnd: newLeft + newWidth,
+                                }
+                            }]);
                         }}
-
+                        snappable={isSnappingEnabled}
+                        verticalGuidelines={verticalGuidelines}
+                        snapDirections={{ "left": true, "right": true, "top": false, "bottom": false, "center": false, "middle": false }}
+                        elementSnapDirections={{ "left": true, "right": true }}
+                        snapThreshold={SNAP_THRESHOLD}
                     />
                 </div>
-
             ))}
         </div>
     );
 }
+
+memo(TextTimeline)

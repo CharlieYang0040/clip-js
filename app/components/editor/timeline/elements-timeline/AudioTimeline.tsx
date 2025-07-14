@@ -10,7 +10,7 @@ import { debounce } from "lodash";
 
 const SNAP_THRESHOLD = 15; // in pixels
 
-export default function ImageTimeline() {
+export default function AudioTimeline() {
     const targetRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const { mediaFiles, textElements, activeElements, timelineZoom, isSnappingEnabled, currentTime, activeGap } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
@@ -24,22 +24,22 @@ export default function ImageTimeline() {
         mediaFilesRef.current = mediaFiles;
     }, [mediaFiles]);
 
-    const imageClips = useMemo(() =>
-        mediaFiles.filter(clip => clip.type === 'image').sort((a, b) => a.positionStart - b.positionStart),
+    const audioClips = useMemo(() =>
+        mediaFiles.filter(clip => clip.type === 'audio').sort((a, b) => a.positionStart - b.positionStart),
         [mediaFiles]
     );
 
     const gaps = useMemo(() => {
         const calculatedGaps: { start: number, end: number }[] = [];
         let lastEnd = 0;
-        for (const element of imageClips) {
+        for (const element of audioClips) {
             if (element.positionStart > lastEnd) {
                 calculatedGaps.push({ start: lastEnd, end: element.positionStart });
             }
             lastEnd = Math.max(lastEnd, element.positionEnd);
         }
         return calculatedGaps;
-    }, [imageClips]);
+    }, [audioClips]);
 
     const verticalGuidelines = useMemo(() => {
         if (!isSnappingEnabled) return [];
@@ -84,7 +84,7 @@ export default function ImageTimeline() {
     const handleGapClick = (gap: { start: number, end: number }, e: React.MouseEvent) => {
         e.stopPropagation();
         dispatch(resetActiveElements());
-        dispatch(setActiveGap({ ...gap, trackType: 'image' }));
+        dispatch(setActiveGap({ ...gap, trackType: 'audio' }));
     };
 
     const isSelected = (clipId: string) => activeElements.some(el => el.id === clipId);
@@ -101,8 +101,8 @@ export default function ImageTimeline() {
         <div className="relative h-full">
             {gaps.map((gap, index) => (
                 <div
-                    key={`gap-image-${index}`}
-                    className={`absolute top-0 h-full z-0 ${activeGap?.trackType === 'image' && activeGap?.start === gap.start ? 'bg-yellow-500 bg-opacity-30 border-2 border-yellow-500' : 'hover:bg-gray-500 hover:bg-opacity-20'}`}
+                    key={`gap-audio-${index}`}
+                    className={`absolute top-0 h-full z-0 ${activeGap?.trackType === 'audio' && activeGap?.start === gap.start ? 'bg-yellow-500 bg-opacity-30 border-2 border-yellow-500' : 'hover:bg-gray-500 hover:bg-opacity-20'}`}
                     style={{
                         left: `${gap.start * timelineZoom}px`,
                         width: `${(gap.end - gap.start) * timelineZoom}px`,
@@ -110,7 +110,7 @@ export default function ImageTimeline() {
                     onClick={(e) => handleGapClick(gap, e)}
                 />
             ))}
-            {imageClips
+            {audioClips
                 .map((clip) => (
                     <div key={clip.id} className="relative z-10">
                         <div
@@ -130,11 +130,11 @@ export default function ImageTimeline() {
                             }}
                         >
                             <Image
-                                alt="Image"
+                                alt="Audio"
                                 className="h-7 w-7 min-w-6 mr-2 flex-shrink-0"
                                 height={30}
                                 width={30}
-                                src="https://www.svgrepo.com/show/535454/image.svg"
+                                src="https://www.svgrepo.com/show/532708/music.svg"
                             />
                             <span className="truncate text-x">{clip.fileName}</span>
 
@@ -239,13 +239,30 @@ export default function ImageTimeline() {
                                 const originalClip = mediaFiles.find(c => c.id === clip.id);
                                 
                                 if (originalClip) {
-                                    const newPositionStart = newLeft;
+                                    const isLeftResize = newLeft !== originalClip.positionStart;
+                                    const newPositionStart = isLeftResize ? newLeft : originalClip.positionStart;
                                     const newPositionEnd = newPositionStart + newWidth;
-                                    
+
+                                    const sourceDuration = originalClip.endTime - originalClip.startTime;
+                                    const newClipDuration = newPositionEnd - newPositionStart;
+                                    const oldClipDuration = originalClip.positionEnd - originalClip.positionStart;
+
+                                    let newStartTime = originalClip.startTime;
+                                    let newEndTime = originalClip.endTime;
+
+                                    if (isLeftResize) {
+                                        const trimStartAmount = (newPositionStart - originalClip.positionStart) * (sourceDuration / oldClipDuration);
+                                        newStartTime = originalClip.startTime + trimStartAmount;
+                                    }
+                                    const trimEndAmount = (newClipDuration - oldClipDuration) * (sourceDuration / oldClipDuration);
+                                    newEndTime = (isLeftResize ? originalClip.endTime : newStartTime) + (newClipDuration * (sourceDuration/oldClipDuration))
+
                                     finalUpdateMedia([{
                                         id: clip.id, data: {
                                             positionStart: newPositionStart,
                                             positionEnd: newPositionEnd,
+                                            startTime: newStartTime,
+                                            endTime: newEndTime,
                                         }
                                     }]);
                                 }
@@ -263,4 +280,4 @@ export default function ImageTimeline() {
     );
 }
 
-memo(ImageTimeline)
+memo(AudioTimeline);

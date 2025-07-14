@@ -1,19 +1,20 @@
 import { useAppSelector } from "@/app/store";
-import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setActiveElement, setSnapMode, setActiveGap } from "@/app/store/slices/projectSlice";
+import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setSnapMode, setActiveGap, toggleActiveElement, resetActiveElements } from "@/app/store/slices/projectSlice";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
 import Header from "./Header";
 import VideoTimeline from "./elements-timeline/VideoTimeline";
 import ImageTimeline from "./elements-timeline/ImageTimeline";
-import AudioTimeline from "./elements-timeline/AudioTimline";
+import AudioTimeline from "./elements-timeline/AudioTimeline";
 import TextTimeline from "./elements-timeline/TextTimeline";
 import { throttle } from 'lodash';
 import GlobalKeyHandlerProps from "../../../components/editor/keys/GlobalKeyHandlerProps";
 import toast from "react-hot-toast";
+import { MediaFile, TextElement } from "@/app/types";
 
 export const Timeline = () => {
-    const { currentTime, timelineZoom, enableMarkerTracking, activeElement, activeElementIndex, mediaFiles, textElements, duration, isPlaying, isSnappingEnabled, activeGap } = useAppSelector((state) => state.projectState);
+    const { currentTime, timelineZoom, enableMarkerTracking, activeElements, mediaFiles, textElements, duration, isPlaying, isSnappingEnabled, activeGap } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const timelineRef = useRef<HTMLDivElement>(null);
     const wasDragging = useRef(false);
@@ -83,141 +84,133 @@ export const Timeline = () => {
     }, []);
 
     const handleSplit = () => {
-        let element = null;
-        let elements = null;
-        let setElements = null;
-
-        if (!activeElement) {
+        if (activeElements.length === 0) {
             toast.error('No element selected.');
             return;
         }
-
-        if (activeElement === 'media') {
+    
+        if (activeElements.length > 1) {
+            toast.error('Cannot split multiple elements at once.');
+            return;
+        }
+    
+        const activeElement = activeElements[0];
+        let elementToSplit;
+        let elements;
+        let setElements;
+    
+        if (activeElement.type === 'media') {
             elements = [...mediaFiles];
-            element = elements[activeElementIndex];
+            elementToSplit = elements.find(e => e.id === activeElement.id);
             setElements = setMediaFiles;
-
-            if (!element) {
-                toast.error('No element selected.');
-                return;
-            }
-
-            const { positionStart, positionEnd } = element;
-
-            if (currentTime <= positionStart || currentTime >= positionEnd) {
-                toast.error('Marker is outside the selected element bounds.');
-                return;
-            }
-
+        } else if (activeElement.type === 'text') {
+            elements = [...textElements];
+            elementToSplit = elements.find(e => e.id === activeElement.id);
+            setElements = setTextElements;
+        }
+    
+        if (!elementToSplit || !elements || !setElements) {
+            toast.error('Selected element not found.');
+            return;
+        }
+    
+        const { positionStart, positionEnd } = elementToSplit;
+    
+        if (currentTime <= positionStart || currentTime >= positionEnd) {
+            toast.error('Marker is outside the selected element bounds.');
+            return;
+        }
+    
+        const activeElementIndex = elements.findIndex(e => e.id === activeElement.id);
+    
+        if (activeElement.type === 'media') {
+            const mediaElement = elementToSplit as MediaFile;
             const positionDuration = positionEnd - positionStart;
-
-            // Media logic (uses startTime/endTime for trimming)
-            const { startTime, endTime } = element;
+            const { startTime, endTime } = mediaElement;
             const sourceDuration = endTime - startTime;
             const ratio = (currentTime - positionStart) / positionDuration;
             const splitSourceOffset = startTime + ratio * sourceDuration;
-
-            const firstPart = {
-                ...element,
+    
+            const firstPart: MediaFile = {
+                ...mediaElement,
                 id: crypto.randomUUID(),
                 positionStart,
                 positionEnd: currentTime,
                 startTime,
                 endTime: splitSourceOffset
             };
-
-            const secondPart = {
-                ...element,
+    
+            const secondPart: MediaFile = {
+                ...mediaElement,
                 id: crypto.randomUUID(),
                 positionStart: currentTime,
                 positionEnd,
                 startTime: splitSourceOffset,
                 endTime
             };
-
-            elements[activeElementIndex] = firstPart;
-            elements.splice(activeElementIndex + 1, 0, secondPart);
-        } else if (activeElement === 'text') {
-            elements = [...textElements];
-            element = elements[activeElementIndex];
-            setElements = setTextElements;
-
-            if (!element) {
-                toast.error('No element selected.');
-                return;
-            }
-
-            const { positionStart, positionEnd } = element;
-
-            if (currentTime <= positionStart || currentTime >= positionEnd) {
-                toast.error('Marker is outside the selected element bounds.');
-                return;
-            }
-
-            const firstPart = {
-                ...element,
+            (elements as MediaFile[]).splice(activeElementIndex, 1, firstPart, secondPart);
+        } else { // Text element
+            const textElement = elementToSplit as TextElement;
+            const firstPart: TextElement = {
+                ...textElement,
                 id: crypto.randomUUID(),
                 positionStart,
                 positionEnd: currentTime,
             };
-
-            const secondPart = {
-                ...element,
-                id: crypto.randomUUID(),
+    
+            const secondPart: TextElement = {
+                ...textElement,
+                id:crypto.randomUUID(),
                 positionStart: currentTime,
                 positionEnd,
             };
-
-            elements[activeElementIndex] = firstPart;
-            elements.splice(activeElementIndex + 1, 0, secondPart);
+            (elements as TextElement[]).splice(activeElementIndex, 1, firstPart, secondPart);
         }
-
-        if (elements && setElements) {
-            dispatch(setElements(elements as any));
-            dispatch(setActiveElement(null));
-            toast.success('Element split successfully.');
+    
+        if (activeElement.type === 'media') {
+            dispatch(setMediaFiles(elements as MediaFile[]));
+        } else {
+            dispatch(setTextElements(elements as TextElement[]));
         }
+        dispatch(resetActiveElements());
+        toast.success('Element split successfully.');
     };
 
     const handleDuplicate = () => {
-        // @ts-ignore
-        let element = null;
-        let elements = null;
-        let setElements = null;
-
-        if (activeElement === 'media') {
-            elements = [...mediaFiles];
-            element = elements[activeElementIndex];
-            setElements = setMediaFiles;
-        } else if (activeElement === 'text') {
-            elements = [...textElements];
-            element = elements[activeElementIndex];
-            setElements = setTextElements;
-        }
-
-        if (!element) {
+        if (activeElements.length === 0) {
             toast.error('No element selected.');
             return;
         }
-
-        const duplicatedElement = {
-            ...element,
-            id: crypto.randomUUID(),
-        };
-
-        if (elements) {
-            elements.splice(activeElementIndex + 1, 0, duplicatedElement as any);
-        }
-
-        if (elements && setElements) {
-            dispatch(setElements(elements as any));
-            dispatch(setActiveElement(null));
-            toast.success('Element duplicated successfully.');
-        }
+    
+        let newMediaFiles = [...mediaFiles];
+        let newTextElements = [...textElements];
+    
+        activeElements.forEach(activeElement => {
+            if (activeElement.type === 'media') {
+                const elementToDuplicate = newMediaFiles.find(e => e.id === activeElement.id);
+                if (elementToDuplicate) {
+                    const duplicatedElement = { ...elementToDuplicate, id: crypto.randomUUID() };
+                    const index = newMediaFiles.findIndex(e => e.id === activeElement.id);
+                    newMediaFiles.splice(index + 1, 0, duplicatedElement);
+                }
+            } else if (activeElement.type === 'text') {
+                const elementToDuplicate = newTextElements.find(e => e.id === activeElement.id);
+                if (elementToDuplicate) {
+                    const duplicatedElement = { ...elementToDuplicate, id: crypto.randomUUID() };
+                    const index = newTextElements.findIndex(e => e.id === activeElement.id);
+                    newTextElements.splice(index + 1, 0, duplicatedElement);
+                }
+            }
+        });
+    
+        dispatch(setMediaFiles(newMediaFiles));
+        dispatch(setTextElements(newTextElements));
+        dispatch(resetActiveElements());
+        toast.success('Element(s) duplicated successfully.');
     };
 
     const handleDelete = () => {
-        if (activeElement === 'gap' && activeGap) {
+        if (activeElements.length === 0 && activeGap) {
             const { start, end, trackType } = activeGap;
             const gapDuration = end - start;
     
@@ -247,41 +240,26 @@ export const Timeline = () => {
                 dispatch(setTextElements(updatedTextElements));
             }
             
-            dispatch(setActiveElement(null));
+            dispatch(resetActiveElements());
             toast.success('Gap deleted.');
             return;
         }
-
-        // @ts-ignore
-        let element = null;
-        let elements = null;
-        let setElements = null;
-
-        if (activeElement === 'media') {
-            elements = [...mediaFiles];
-            element = elements[activeElementIndex];
-            setElements = setMediaFiles;
-        } else if (activeElement === 'text') {
-            elements = [...textElements];
-            element = elements[activeElementIndex];
-            setElements = setTextElements;
-        }
-
-        if (!element) {
+    
+        if (activeElements.length === 0) {
             toast.error('No element selected.');
             return;
         }
-
-        if (elements) {
-            // @ts-ignore
-            elements = elements.filter(ele => ele.id !== element.id)
-        }
-
-        if (elements && setElements) {
-            dispatch(setElements(elements as any));
-            dispatch(setActiveElement(null));
-            toast.success('Element deleted successfully.');
-        }
+    
+        const mediaIdsToDelete = new Set(activeElements.filter(el => el.type === 'media').map(el => el.id));
+        const textIdsToDelete = new Set(activeElements.filter(el => el.type === 'text').map(el => el.id));
+    
+        const updatedMediaFiles = mediaFiles.filter(file => !mediaIdsToDelete.has(file.id));
+        const updatedTextElements = textElements.filter(text => !textIdsToDelete.has(text.id));
+    
+        dispatch(setMediaFiles(updatedMediaFiles));
+        dispatch(setTextElements(updatedTextElements));
+        dispatch(resetActiveElements());
+        toast.success('Element(s) deleted successfully.');
     };
 
     const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -294,7 +272,7 @@ export const Timeline = () => {
             const scrollLeft = timelineRef.current.scrollLeft;
             const time = (x + scrollLeft) / timelineZoom;
             dispatch(setCurrentTime(Math.max(0, time)));
-            dispatch(setActiveElement(null));
+            dispatch(resetActiveElements());
         }
     };
 

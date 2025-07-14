@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { TextElement, MediaFile, ActiveElement, ExportConfig } from '../../types';
+import { TextElement, MediaFile, ActiveElement, ExportConfig, SelectedElement } from '../../types';
 import { ProjectState } from '../../types';
 
 export const initialState: ProjectState = {
@@ -18,8 +18,7 @@ export const initialState: ProjectState = {
     enableMarkerTracking: true,
     isSnappingEnabled: true,
     activeSection: 'media',
-    activeElement: null,
-    activeElementIndex: 0,
+    activeElements: [],
     activeGap: null,
     resolution: { width: 1920, height: 1080 },
     fps: 30,
@@ -90,8 +89,7 @@ const projectStateSlice = createSlice({
                 state.timelineZoom = previousState.timelineZoom;
                 state.enableMarkerTracking = previousState.enableMarkerTracking;
                 state.activeSection = previousState.activeSection;
-                state.activeElement = previousState.activeElement;
-                state.activeElementIndex = previousState.activeElementIndex;
+                state.activeElements = previousState.activeElements;
                 state.activeGap = previousState.activeGap;
                 state.resolution = previousState.resolution;
                 state.fps = previousState.fps;
@@ -127,8 +125,7 @@ const projectStateSlice = createSlice({
                 state.timelineZoom = nextState.timelineZoom;
                 state.enableMarkerTracking = nextState.enableMarkerTracking;
                 state.activeSection = nextState.activeSection;
-                state.activeElement = nextState.activeElement;
-                state.activeElementIndex = nextState.activeElementIndex;
+                state.activeElements = nextState.activeElements;
                 state.activeGap = nextState.activeGap;
                 state.resolution = nextState.resolution;
                 state.fps = nextState.fps;
@@ -151,6 +148,7 @@ const projectStateSlice = createSlice({
             addToHistory(state);
             state.mediaFiles = action.payload;
             state.duration = calculateTotalDuration(state.mediaFiles, state.textElements);
+            state.activeElements = [];
         },
         updateMediaFiles_INTERNAL: (state, action: PayloadAction<MediaFile[]>) => {
             state.mediaFiles = action.payload;
@@ -173,6 +171,7 @@ const projectStateSlice = createSlice({
             addToHistory(state);
             state.textElements = action.payload;
             state.duration = calculateTotalDuration(state.mediaFiles, state.textElements);
+            state.activeElements = [];
         },
         updateTextElements_INTERNAL: (state, action: PayloadAction<TextElement[]>) => {
             state.textElements = action.payload;
@@ -190,17 +189,32 @@ const projectStateSlice = createSlice({
         setActiveSection: (state, action: PayloadAction<ActiveElement>) => {
             state.activeSection = action.payload;
         },
-        setActiveElement: (state, action: PayloadAction<ActiveElement | 'gap' | null>) => {
-            state.activeElement = action.payload;
-            if (action.payload !== 'gap') {
-                state.activeGap = null;
+        toggleActiveElement: (state, action: PayloadAction<{ element: SelectedElement; metaKey?: boolean }>) => {
+            const { element, metaKey } = action.payload;
+            const isSelected = state.activeElements.some(e => e.id === element.id);
+
+            if (metaKey) {
+                if (isSelected) {
+                    state.activeElements = state.activeElements.filter(e => e.id !== element.id);
+                } else {
+                    state.activeElements.push(element);
+                }
+            } else {
+                if (isSelected && state.activeElements.length === 1) {
+                    state.activeElements = [];
+                } else {
+                    state.activeElements = [element];
+                }
             }
+            state.activeGap = null;
         },
-        setActiveElementIndex: (state, action: PayloadAction<number>) => {
-            state.activeElementIndex = action.payload;
+        resetActiveElements: (state) => {
+            state.activeElements = [];
+            state.activeGap = null;
         },
         setActiveGap: (state, action: PayloadAction<{ start: number, end: number, trackType: 'video' | 'audio' | 'image' | 'text' } | null>) => {
             state.activeGap = action.payload;
+            state.activeElements = [];
         },
         setFilesID: (state, action: PayloadAction<string[]>) => {
             state.filesID = action.payload;
@@ -248,8 +262,12 @@ export const {
     setTextElements,
     updateTextElements_INTERNAL,
     setCurrentTime,
-    setProjectName,
     setIsPlaying,
+    setIsMuted,
+    setActiveSection,
+    toggleActiveElement,
+    resetActiveElements,
+    setActiveGap,
     setFilesID,
     setExportSettings,
     setResolution,
@@ -258,14 +276,13 @@ export const {
     setFps,
     setMarkerTrack,
     setSnapMode,
-    setActiveGap,
     rehydrate,
     createNewProject,
     setTimelineZoom,
-    setActiveElement,
-    setIsMuted,
-    setActiveSection,
-    setActiveElementIndex,
+    setProjectName,
+    setProjectId,
+    setProjectCreatedAt,
+    setProjectLastModified,
 } = projectStateSlice.actions;
 
 export default projectStateSlice.reducer; 

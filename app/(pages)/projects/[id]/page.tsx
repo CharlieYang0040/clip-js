@@ -34,7 +34,8 @@ export default function Project({ params }: { params: { id: string } }) {
     const [showShortcuts, setShowShortcuts] = useState(false);
 
     const router = useRouter();
-    const { activeSection, activeElement } = projectState;
+    const { activeSection, activeElements } = projectState;
+    const firstActiveElement = activeElements.length > 0 ? activeElements[0] : null;
 
     // when page is loaded set the project id if it exists
     useEffect(() => {
@@ -331,9 +332,9 @@ export default function Project({ params }: { params: { id: string } }) {
                         {/* Collapse button */}
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-lg font-semibold text-white">
-                                {activeElement === "media" && "Media Properties"}
-                                {activeElement === "text" && "Text Properties"}
-                                {!activeElement && "Properties"}
+                                {firstActiveElement?.type === "media" && "Media Properties"}
+                                {firstActiveElement?.type === "text" && "Text Properties"}
+                                {!firstActiveElement && "Properties"}
                             </h2>
                             <button
                                 onClick={() => setRightSidebarCollapsed(true)}
@@ -346,17 +347,17 @@ export default function Project({ params }: { params: { id: string } }) {
                             </button>
                         </div>
 
-                        {activeElement === "media" && (
+                        {firstActiveElement?.type === "media" && (
                             <div>
                                 <MediaProperties />
                             </div>
                         )}
-                        {activeElement === "text" && (
+                        {firstActiveElement?.type === "text" && (
                             <div>
                                 <TextProperties />
                             </div>
                         )}
-                        {!activeElement && (
+                        {!firstActiveElement && (
                             <div className="text-gray-400 text-center mt-8">
                                 <p>Select an element from the timeline to view its properties.</p>
                             </div>

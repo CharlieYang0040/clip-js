@@ -1,15 +1,17 @@
 "use client";
 
 import { useAppSelector } from '../../../store';
-import { setActiveElement, setMediaFiles, setTextElements } from '../../../store/slices/projectSlice';
+import { setMediaFiles } from '../../../store/slices/projectSlice';
 import { MediaFile } from '../../../types';
 import { useAppDispatch } from '../../../store';
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 
 export default function MediaProperties() {
-    const { mediaFiles, activeElementIndex } = useAppSelector((state) => state.projectState);
-    const mediaFile = mediaFiles[activeElementIndex];
+    const { mediaFiles, activeElements } = useAppSelector((state) => state.projectState);
+    const activeMediaElement = activeElements.find(el => el.type === 'media');
+    const mediaFile = mediaFiles.find(file => file.id === activeMediaElement?.id);
+
     const dispatch = useAppDispatch();
     const [isEditing, setIsEditing] = useState<string | null>(null);
     const [tempValues, setTempValues] = useState<Record<string, number>>({});
