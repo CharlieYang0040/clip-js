@@ -4,16 +4,98 @@ import { useAppSelector } from '../../../store';
 import { setActiveElement, setMediaFiles, setTextElements } from '../../../store/slices/projectSlice';
 import { MediaFile } from '../../../types';
 import { useAppDispatch } from '../../../store';
+import { useState, useCallback } from 'react';
+import toast from 'react-hot-toast';
 
 export default function MediaProperties() {
     const { mediaFiles, activeElementIndex } = useAppSelector((state) => state.projectState);
     const mediaFile = mediaFiles[activeElementIndex];
     const dispatch = useAppDispatch();
-    const onUpdateMedia = (id: string, updates: Partial<MediaFile>) => {
+    const [isEditing, setIsEditing] = useState<string | null>(null);
+    const [tempValues, setTempValues] = useState<Record<string, number>>({});
+
+    const onUpdateMedia = useCallback((id: string, updates: Partial<MediaFile>) => {
         dispatch(setMediaFiles(mediaFiles.map(media =>
             media.id === id ? { ...media, ...updates } : media
         )));
-    };
+    }, [dispatch, mediaFiles]);
+
+    const validateTimeInput = useCallback((value: number, field: string, clip: MediaFile) => {
+        switch (field) {
+            case 'startTime':
+                return Math.max(0, Math.min(value, clip.endTime - 0.1));
+            case 'endTime':
+                return Math.max(clip.startTime + 0.1, value);
+            case 'positionStart':
+                return Math.max(0, value);
+            case 'positionEnd':
+                return Math.max(clip.positionStart + 0.1, value);
+            default:
+                return value;
+        }
+    }, []);
+
+    const handleTimeInputChange = useCallback((field: string, value: string) => {
+        const numValue = parseFloat(value);
+        if (isNaN(numValue)) return;
+        
+        setTempValues(prev => ({ ...prev, [field]: numValue }));
+    }, []);
+
+    const handleTimeInputBlur = useCallback((field: string) => {
+        if (!mediaFile || tempValues[field] === undefined) return;
+        
+        const validatedValue = validateTimeInput(tempValues[field], field, mediaFile);
+        const updates: Partial<MediaFile> = {};
+        
+        if (field === 'startTime') {
+            updates.startTime = validatedValue;
+        } else if (field === 'endTime') {
+            updates.endTime = validatedValue;
+        } else if (field === 'positionStart') {
+            const duration = mediaFile.positionEnd - mediaFile.positionStart;
+            updates.positionStart = validatedValue;
+            updates.positionEnd = validatedValue + duration;
+        } else if (field === 'positionEnd') {
+            if (validatedValue <= mediaFile.positionStart) {
+                toast.error('End time must be greater than start time');
+                return;
+            }
+            updates.positionEnd = validatedValue;
+        }
+
+        onUpdateMedia(mediaFile.id, updates);
+        setIsEditing(null);
+        setTempValues(prev => {
+            const newValues = { ...prev };
+            delete newValues[field];
+            return newValues;
+        });
+        
+        if (validatedValue !== tempValues[field]) {
+            toast.success('Time adjusted to valid range');
+        }
+    }, [mediaFile, tempValues, validateTimeInput, onUpdateMedia]);
+
+    const handleTimeInputKeyDown = useCallback((e: React.KeyboardEvent, field: string) => {
+        if (e.key === 'Enter') {
+            handleTimeInputBlur(field);
+        } else if (e.key === 'Escape') {
+            setIsEditing(null);
+            setTempValues(prev => {
+                const newValues = { ...prev };
+                delete newValues[field];
+                return newValues;
+            });
+        }
+    }, [handleTimeInputBlur]);
+
+    const getDisplayValue = useCallback((field: string, originalValue: number) => {
+        if (isEditing === field && tempValues[field] !== undefined) {
+            return tempValues[field].toString();
+        }
+        return originalValue.toFixed(2);
+    }, [isEditing, tempValues]);
 
     if (!mediaFile) return null;
 
@@ -28,28 +110,31 @@ export default function MediaProperties() {
                             <label className="block text-sm">Start (s)</label>
                             <input
                                 type="number"
-                                readOnly={true}
-                                value={mediaFile.startTime}
+                                step="0.01"
+                                value={getDisplayValue('startTime', mediaFile.startTime)}
                                 min={0}
-                                onChange={(e) => onUpdateMedia(mediaFile.id, {
-                                    startTime: Number(e.target.value),
-                                    endTime: mediaFile.endTime
-                                })}
-                                className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-white-500 focus:border-white-500"
+                                max={mediaFile.endTime - 0.1}
+                                onFocus={() => setIsEditing('startTime')}
+                                onChange={(e) => handleTimeInputChange('startTime', e.target.value)}
+                                onBlur={() => handleTimeInputBlur('startTime')}
+                                onKeyDown={(e) => handleTimeInputKeyDown(e, 'startTime')}
+                                className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="0.00"
                             />
                         </div>
                         <div>
                             <label className="block text-sm">End (s)</label>
                             <input
                                 type="number"
-                                readOnly={true}
-                                value={mediaFile.endTime}
-                                min={mediaFile.startTime}
-                                onChange={(e) => onUpdateMedia(mediaFile.id, {
-                                    startTime: mediaFile.startTime,
-                                    endTime: Number(e.target.value)
-                                })}
-                                className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-white-500 focus:border-white-500"
+                                step="0.01"
+                                value={getDisplayValue('endTime', mediaFile.endTime)}
+                                min={mediaFile.startTime + 0.1}
+                                onFocus={() => setIsEditing('endTime')}
+                                onChange={(e) => handleTimeInputChange('endTime', e.target.value)}
+                                onBlur={() => handleTimeInputBlur('endTime')}
+                                onKeyDown={(e) => handleTimeInputKeyDown(e, 'endTime')}
+                                className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="0.00"
                             />
                         </div>
                     </div>
@@ -62,29 +147,35 @@ export default function MediaProperties() {
                             <label className="block text-sm">Start (s)</label>
                             <input
                                 type="number"
-                                readOnly={true}
-                                value={mediaFile.positionStart}
+                                step="0.01"
+                                value={getDisplayValue('positionStart', mediaFile.positionStart)}
                                 min={0}
-                                onChange={(e) => onUpdateMedia(mediaFile.id, {
-                                    positionStart: Number(e.target.value),
-                                    positionEnd: Number(e.target.value) + (mediaFile.positionEnd - mediaFile.positionStart)
-                                })}
-                                className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-white-500 focus:border-white-500"
+                                onFocus={() => setIsEditing('positionStart')}
+                                onChange={(e) => handleTimeInputChange('positionStart', e.target.value)}
+                                onBlur={() => handleTimeInputBlur('positionStart')}
+                                onKeyDown={(e) => handleTimeInputKeyDown(e, 'positionStart')}
+                                className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="0.00"
                             />
                         </div>
                         <div>
                             <label className="block text-sm">End (s)</label>
                             <input
                                 type="number"
-                                readOnly={true}
-                                value={mediaFile.positionEnd}
-                                min={mediaFile.positionStart}
-                                onChange={(e) => onUpdateMedia(mediaFile.id, {
-                                    positionEnd: Number(e.target.value)
-                                })}
-                                className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-white-500 focus:border-white-500"
+                                step="0.01"
+                                value={getDisplayValue('positionEnd', mediaFile.positionEnd)}
+                                min={mediaFile.positionStart + 0.1}
+                                onFocus={() => setIsEditing('positionEnd')}
+                                onChange={(e) => handleTimeInputChange('positionEnd', e.target.value)}
+                                onBlur={() => handleTimeInputBlur('positionEnd')}
+                                onKeyDown={(e) => handleTimeInputKeyDown(e, 'positionEnd')}
+                                className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="0.00"
                             />
                         </div>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">
+                        Duration: {(mediaFile.positionEnd - mediaFile.positionStart).toFixed(2)}s
                     </div>
                 </div>
                 {/* Visual Properties */}
@@ -184,7 +275,18 @@ export default function MediaProperties() {
                         </div> */}
                     </div>
                 </div>}
-                <div >
+                <div>
+                    <div className="bg-blue-900 bg-opacity-20 border border-blue-500 border-opacity-30 rounded-lg p-3 mt-4">
+                        <div className="flex items-center space-x-2 text-blue-300 text-sm">
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                            </svg>
+                            <span className="font-medium">Tip:</span>
+                        </div>
+                        <p className="text-blue-200 text-sm mt-1">
+                            Press Enter to apply changes, Escape to cancel. Time values are automatically validated.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div >

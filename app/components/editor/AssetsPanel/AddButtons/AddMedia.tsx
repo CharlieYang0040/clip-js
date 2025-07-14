@@ -17,21 +17,27 @@ export default function AddMedia({ fileId }: { fileId: string }) {
         const file = await getFile(fileId);
         const mediaId = crypto.randomUUID();
 
-        if (fileId) {
+        if (fileId && file) {
             const relevantClips = mediaFiles.filter(clip => clip.type === categorizeFile(file.type));
             const lastEnd = relevantClips.length > 0
                 ? Math.max(...relevantClips.map(f => f.positionEnd))
                 : 0;
+
+            let duration = 30; // Default for images
+            const mediaType = categorizeFile(file.type);
+            if (mediaType === 'video' || mediaType === 'audio') {
+                duration = await getMediaDuration(file);
+            }
 
             updatedMedia.push({
                 id: mediaId,
                 fileName: file.name,
                 fileId: fileId,
                 startTime: 0,
-                endTime: 30,
+                endTime: duration,
                 src: URL.createObjectURL(file),
                 positionStart: lastEnd,
-                positionEnd: lastEnd + 30,
+                positionEnd: lastEnd + duration,
                 includeInMerge: true,
                 x: 0,
                 y: 0,
@@ -72,3 +78,15 @@ export default function AddMedia({ fileId }: { fileId: string }) {
         </div>
     );
 }
+
+const getMediaDuration = (file: File): Promise<number> => {
+    return new Promise((resolve) => {
+        const media = file.type.startsWith('video/') ? document.createElement('video') : document.createElement('audio');
+        media.src = URL.createObjectURL(file);
+        media.addEventListener('loadedmetadata', () => {
+            resolve(media.duration);
+            URL.revokeObjectURL(media.src);
+        });
+        media.load();
+    });
+};

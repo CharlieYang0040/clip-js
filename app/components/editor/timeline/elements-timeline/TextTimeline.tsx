@@ -61,22 +61,30 @@ export default function TextTimeline() {
         target.style.left = `${constrainedLeft}px`;
     };
 
-    const handleResize = (clip: TextElement, target: HTMLElement, width: number) => {
+    const handleRightResize = (clip: TextElement, target: HTMLElement, width: number) => {
         const newPositionEnd = width / timelineZoom;
 
         onUpdateText(clip.id, {
             positionEnd: clip.positionStart + newPositionEnd,
         })
     };
-    const handleLeftResize = (clip: TextElement, target: HTMLElement, width: number) => {
-        const newPositionEnd = width / timelineZoom;
-        // Ensure we do not resize beyond the right edge of the clip
-        const constrainedLeft = Math.max(clip.positionStart + ((clip.positionEnd - clip.positionStart) - newPositionEnd), 0);
+
+    const handleLeftResize = (clip: TextElement, target: HTMLElement, width: number, delta: number) => {
+        const currentLeft = parseFloat(target.style.left) || (clip.positionStart * timelineZoom);
+        const newLeft = Math.max(0, currentLeft + delta);
+        const newPositionStart = newLeft / timelineZoom;
+
+        const maxPositionStart = clip.positionEnd - 0.1; // MIN_DURATION
+        const constrainedPositionStart = Math.min(newPositionStart, maxPositionStart);
+
+        const newWidth = (clip.positionEnd - constrainedPositionStart) * timelineZoom;
 
         onUpdateText(clip.id, {
-            positionStart: constrainedLeft,
-            // startTime: constrainedLeft,
-        })
+            positionStart: constrainedPositionStart,
+        });
+
+        target.style.left = `${constrainedPositionStart * timelineZoom}px`;
+        target.style.width = `${newWidth}px`;
     };
 
     useEffect(() => {
@@ -151,19 +159,18 @@ export default function TextTimeline() {
                         }}
                         onResize={({
                             target, width,
-                            delta, direction,
+                            delta, direction, drag
                         }: OnResize) => {
                             if (direction[0] === 1) {
+                                // Right resize
                                 handleClick('text', clip.id)
                                 delta[0] && (target!.style.width = `${width}px`);
-                                handleResize(clip, target as HTMLElement, width);
-
+                                handleRightResize(clip, target as HTMLElement, width);
                             }
                             else if (direction[0] === -1) {
-                                // TODO: handle left resize
-                                // handleClick('text', clip.id)
-                                // delta[0] && (target!.style.width = `${width}px`);
-                                // handleLeftResize(clip, target as HTMLElement, width);
+                                // Left resize
+                                handleClick('text', clip.id)
+                                handleLeftResize(clip, target as HTMLElement, width, drag.delta[0]);
                             }
                         }}
                         onResizeEnd={({ target, isDrag, clientX, clientY }) => {

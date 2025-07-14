@@ -15,14 +15,8 @@ export default function ImageTimeline() {
     const dispatch = useDispatch();
     const moveableRef = useRef<Record<string, Moveable | null>>({});
 
-
-    // this affect the performance cause of too much re-renders
-
-    // const onUpdateMedia = (id: string, updates: Partial<MediaFile>) => {
-    //     dispatch(setMediaFiles(mediaFiles.map(media =>
-    //         media.id === id ? { ...media, ...updates } : media
-    //     )));
-    // };
+    // Minimum duration in seconds to prevent clips from becoming too small
+    const MIN_DURATION = 0.1;
 
     // TODO: this is a hack to prevent the mediaFiles from being updated too often while dragging or resizing
     const mediaFilesRef = useRef(mediaFiles);
@@ -30,6 +24,7 @@ export default function ImageTimeline() {
         mediaFilesRef.current = mediaFiles;
     }, [mediaFiles]);
 
+    // More aggressive throttling for smooth performance
     const onUpdateMedia = useMemo(() =>
         throttle((id: string, updates: Partial<MediaFile>) => {
             const currentFiles = mediaFilesRef.current;
@@ -37,7 +32,18 @@ export default function ImageTimeline() {
                 media.id === id ? { ...media, ...updates } : media
             );
             dispatch(setMediaFiles(updated));
-        }, 100), [dispatch]
+        }, 16), [dispatch]
+    );
+
+    // Debounced update for final position
+    const finalUpdateMedia = useMemo(() =>
+        debounce((id: string, updates: Partial<MediaFile>) => {
+            const currentFiles = mediaFilesRef.current;
+            const updated = currentFiles.map(media =>
+                media.id === id ? { ...media, ...updates } : media
+            );
+            dispatch(setMediaFiles(updated));
+        }, 50), [dispatch]
     );
 
     const handleClick = (element: string, index: number | string) => {
@@ -49,37 +55,58 @@ export default function ImageTimeline() {
         }
     };
 
-    const handleDrag = (clip: MediaFile, target: HTMLElement, left: number) => {
+    const handleDrag = useCallback((clip: MediaFile, target: HTMLElement, left: number) => {
         // no negative left
         const constrainedLeft = Math.max(left, 0);
         const newPositionStart = constrainedLeft / timelineZoom;
+        const duration = clip.positionEnd - clip.positionStart;
+        
+        // Update visual immediately
+        target.style.left = `${constrainedLeft}px`;
+        
+        // Throttled state update
         onUpdateMedia(clip.id, {
             positionStart: newPositionStart,
-            positionEnd: (newPositionStart - clip.positionStart) + clip.positionEnd,
-            endTime: (newPositionStart - clip.positionStart) + clip.endTime
-        })
+            positionEnd: newPositionStart + duration,
+        });
+    }, [timelineZoom, onUpdateMedia]);
 
-        target.style.left = `${constrainedLeft}px`;
-    };
+    const handleRightResize = useCallback((clip: MediaFile, target: HTMLElement, width: number) => {
+        const newDuration = width / timelineZoom;
+        const newPositionEnd = clip.positionStart + Math.max(newDuration, MIN_DURATION);
 
-    const handleRightResize = (clip: MediaFile, target: HTMLElement, width: number) => {
-        const newPositionEnd = width / timelineZoom;
+        // Update visual immediately
+        target.style.width = `${width}px`;
 
+        // For images, just update the end time to match position
         onUpdateMedia(clip.id, {
-            positionEnd: clip.positionStart + newPositionEnd,
-            endTime: clip.positionStart + newPositionEnd,
-        })
-    };
-    const handleLeftResize = (clip: MediaFile, target: HTMLElement, width: number) => {
-        const newPositionEnd = width / timelineZoom;
-        // Ensure we do not resize beyond the right edge of the clip
-        const constrainedLeft = Math.max(clip.positionStart + ((clip.positionEnd - clip.positionStart) - newPositionEnd), 0);
+            positionEnd: newPositionEnd,
+            endTime: newPositionEnd,
+        });
+    }, [timelineZoom, onUpdateMedia, MIN_DURATION]);
 
+    const handleLeftResize = useCallback((clip: MediaFile, target: HTMLElement, width: number, delta: number[]) => {
+        // Calculate new position based on delta change
+        const currentLeft = parseFloat(target.style.left) || (clip.positionStart * timelineZoom);
+        const newLeft = Math.max(0, currentLeft + delta[0]);
+        const newPositionStart = newLeft / timelineZoom;
+        
+        // Ensure minimum duration
+        const maxPositionStart = clip.positionEnd - MIN_DURATION;
+        const constrainedPositionStart = Math.min(newPositionStart, maxPositionStart);
+
+        // Update visual position and width immediately
+        const newWidth = (clip.positionEnd - constrainedPositionStart) * timelineZoom;
+        target.style.left = `${constrainedPositionStart * timelineZoom}px`;
+        target.style.width = `${newWidth}px`;
+
+        // For images, we don't need complex startTime/endTime calculations
+        // Just update the position
         onUpdateMedia(clip.id, {
-            positionStart: constrainedLeft,
-            // startTime: constrainedLeft,
-        })
-    };
+            positionStart: constrainedPositionStart,
+            startTime: constrainedPositionStart,
+        });
+    }, [timelineZoom, onUpdateMedia, MIN_DURATION]);
 
     useEffect(() => {
         for (const clip of mediaFiles) {
@@ -106,6 +133,7 @@ export default function ImageTimeline() {
                                 left: `${clip.positionStart * timelineZoom}px`,
                                 width: `${(clip.positionEnd - clip.positionStart) * timelineZoom}px`,
                                 zIndex: clip.zIndex,
+                                transition: 'none', // Remove CSS transition to prevent conflicts
                             }}
                         >
                             {/* <MoveableTimeline /> */}
@@ -146,6 +174,15 @@ export default function ImageTimeline() {
                                 handleDrag(clip, target as HTMLElement, left);
                             }}
                             onDragEnd={({ target, isDrag, clientX, clientY }) => {
+                                // Final position update
+                                const currentLeft = parseFloat((target as HTMLElement).style.left) || 0;
+                                const newPositionStart = currentLeft / timelineZoom;
+                                const duration = clip.positionEnd - clip.positionStart;
+                                
+                                finalUpdateMedia(clip.id, {
+                                    positionStart: newPositionStart,
+                                    positionEnd: newPositionStart + duration,
+                                });
                             }}
 
                             /* resizable*/
@@ -154,24 +191,39 @@ export default function ImageTimeline() {
                             onResizeStart={({ target, clientX, clientY }) => {
                             }}
                             onResize={({
-                                target, width,
-                                delta, direction,
+                                target, width, height,
+                                delta, direction, drag
                             }: OnResize) => {
-                                if (direction[0] === 1) {
-                                    handleClick('media', clip.id)
-                                    delta[0] && (target!.style.width = `${width}px`);
-                                    handleRightResize(clip, target as HTMLElement, width);
+                                handleClick('media', clip.id);
 
+                                if (direction[0] === 1) {
+                                    // Right resize
+                                    handleRightResize(clip, target as HTMLElement, width);
                                 }
                                 else if (direction[0] === -1) {
-                                    // TODO: handle left resize
-                                    // handleClick('media', clip.id)
-                                    // delta[0] && (target!.style.width = `${width}px`);
-                                    // handleLeftResize(clip, target as HTMLElement, width);
+                                    // Left resize
+                                    handleLeftResize(clip, target as HTMLElement, width, drag.delta);
                                 }
-
                             }}
                             onResizeEnd={({ target, isDrag, clientX, clientY }) => {
+                                // Final position update after resize
+                                const currentLeft = parseFloat((target as HTMLElement).style.left) || 0;
+                                const currentWidth = parseFloat((target as HTMLElement).style.width) || 0;
+                                const newPositionStart = currentLeft / timelineZoom;
+                                const newDuration = currentWidth / timelineZoom;
+                                const newPositionEnd = newPositionStart + newDuration;
+                                
+                                // Ensure minimum duration
+                                const constrainedPositionStart = Math.max(0, newPositionStart);
+                                const constrainedPositionEnd = Math.max(constrainedPositionStart + MIN_DURATION, newPositionEnd);
+
+                                // For images, simple duration adjustment
+                                finalUpdateMedia(clip.id, {
+                                    positionStart: constrainedPositionStart,
+                                    positionEnd: constrainedPositionEnd,
+                                    startTime: constrainedPositionStart,
+                                    endTime: constrainedPositionEnd,
+                                });
                             }}
                             className={activeElement === 'media' && mediaFiles[activeElementIndex].id === clip.id ? '' : 'moveable-control-box-hidden'}
 
