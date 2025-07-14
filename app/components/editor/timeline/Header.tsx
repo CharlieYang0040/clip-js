@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useAppSelector } from '../../../store';
 
-export const Header = ({ onDragStart }: { onDragStart: (e: React.MouseEvent<HTMLDivElement>) => void }) => {
+export const Header = ({ onDragStart }: { onDragStart?: (e: React.MouseEvent<HTMLDivElement>) => void }) => {
     const { duration, timelineZoom } = useAppSelector((state) => state.projectState);
 
     const { tickInterval, majorTickMultiplier, labelPrecision } = useMemo(() => {

@@ -117,7 +117,19 @@ export const storeProject = async (project: any) => {
             return null;
         }
 
-        await db.put('projects', project);
+        // Create a deep copy to avoid mutating the original state object
+        const projectToStore = JSON.parse(JSON.stringify(project));
+
+        // Remove blob URLs from mediaFiles before saving
+        if (projectToStore.mediaFiles && Array.isArray(projectToStore.mediaFiles)) {
+            projectToStore.mediaFiles.forEach((file: any) => {
+                if (file.src) {
+                    delete file.src;
+                }
+            });
+        }
+
+        await db.put('projects', projectToStore);
 
         return project.id;
     } catch (error) {

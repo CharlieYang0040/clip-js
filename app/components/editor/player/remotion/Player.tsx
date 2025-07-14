@@ -11,7 +11,7 @@ export const PreviewPlayer = () => {
     const projectState = useAppSelector((state) => state.projectState);
     const { duration, currentTime, isPlaying, isMuted } = projectState;
     const playerRef = useRef<PlayerRef>(null);
-    const dispatch = useDispatch();
+    const dispatch = useAppDispatch();
 
     // update frame when current time with marker
     useEffect(() => {
@@ -58,17 +58,26 @@ export const PreviewPlayer = () => {
         }
     }, [isMuted]);
 
+    if (typeof duration !== 'number' || isNaN(duration) || duration <= 0) {
+        return (
+            <div className="w-full h-full bg-gray-900 flex items-center justify-center">
+                <p className="text-gray-400">Add media to the timeline to start editing.</p>
+            </div>
+        );
+    }
+
     return (
         <Player
             ref={playerRef}
             component={Composition}
             inputProps={{}}
-            durationInFrames={Math.floor(duration * fps) + 1}
+            durationInFrames={Math.max(1, Math.floor((duration || 0) * fps) + 1)}
             compositionWidth={1920}
             compositionHeight={1080}
             fps={fps}
             style={{ width: "100%", height: "100%" }}
             controls
+            acknowledgeRemotionLicense
         />
     )
 };

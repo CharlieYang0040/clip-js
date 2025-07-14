@@ -59,14 +59,19 @@ export default function Project({ params }: { params: { id: string } }) {
             if (currentProjectId) {
                 const project = await getProject(currentProjectId);
                 if (project) {
-                    dispatch(rehydrate(project));
-
-                    dispatch(setMediaFiles(await Promise.all(
+                    const validMediaFiles = (await Promise.all(
                         project.mediaFiles.map(async (media: MediaFile) => {
                             const file = await getFile(media.fileId);
-                            return { ...media, src: URL.createObjectURL(file) };
+                            if (file) {
+                                return { ...media, src: URL.createObjectURL(file) };
+                            }
+                            console.warn(`File not found in IndexedDB for fileId: ${media.fileId}`);
+                            return null;
                         })
-                    )));
+                    )).filter(Boolean) as MediaFile[];
+
+                    const hydratedProject = { ...project, mediaFiles: validMediaFiles };
+                    dispatch(rehydrate(hydratedProject));
                 }
             }
         };

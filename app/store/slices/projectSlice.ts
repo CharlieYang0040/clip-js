@@ -20,6 +20,7 @@ export const initialState: ProjectState = {
     activeSection: 'media',
     activeElement: null,
     activeElementIndex: 0,
+    activeGap: null,
     resolution: { width: 1920, height: 1080 },
     fps: 30,
     aspectRatio: '16:9',
@@ -91,6 +92,7 @@ const projectStateSlice = createSlice({
                 state.activeSection = previousState.activeSection;
                 state.activeElement = previousState.activeElement;
                 state.activeElementIndex = previousState.activeElementIndex;
+                state.activeGap = previousState.activeGap;
                 state.resolution = previousState.resolution;
                 state.fps = previousState.fps;
                 state.aspectRatio = previousState.aspectRatio;
@@ -127,6 +129,7 @@ const projectStateSlice = createSlice({
                 state.activeSection = nextState.activeSection;
                 state.activeElement = nextState.activeElement;
                 state.activeElementIndex = nextState.activeElementIndex;
+                state.activeGap = nextState.activeGap;
                 state.resolution = nextState.resolution;
                 state.fps = nextState.fps;
                 state.aspectRatio = nextState.aspectRatio;
@@ -187,11 +190,17 @@ const projectStateSlice = createSlice({
         setActiveSection: (state, action: PayloadAction<ActiveElement>) => {
             state.activeSection = action.payload;
         },
-        setActiveElement: (state, action: PayloadAction<ActiveElement | null>) => {
+        setActiveElement: (state, action: PayloadAction<ActiveElement | 'gap' | null>) => {
             state.activeElement = action.payload;
+            if (action.payload !== 'gap') {
+                state.activeGap = null;
+            }
         },
         setActiveElementIndex: (state, action: PayloadAction<number>) => {
             state.activeElementIndex = action.payload;
+        },
+        setActiveGap: (state, action: PayloadAction<{ start: number, end: number, trackType: 'video' | 'audio' | 'image' | 'text' } | null>) => {
+            state.activeGap = action.payload;
         },
         setFilesID: (state, action: PayloadAction<string[]>) => {
             state.filesID = action.payload;
@@ -248,14 +257,15 @@ export const {
     setSpeed,
     setFps,
     setMarkerTrack,
-    setIsMuted,
-    setActiveSection,
     setSnapMode,
-    setActiveElement,
-    setActiveElementIndex,
-    setTimelineZoom,
+    setActiveGap,
     rehydrate,
     createNewProject,
+    setTimelineZoom,
+    setActiveElement,
+    setIsMuted,
+    setActiveSection,
+    setActiveElementIndex,
 } = projectStateSlice.actions;
 
 export default projectStateSlice.reducer; 

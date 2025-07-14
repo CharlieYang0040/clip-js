@@ -1,5 +1,5 @@
 import { useAppSelector } from "@/app/store";
-import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setActiveElement, setSnapMode } from "@/app/store/slices/projectSlice";
+import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setActiveElement, setSnapMode, setActiveGap } from "@/app/store/slices/projectSlice";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
@@ -13,7 +13,7 @@ import GlobalKeyHandlerProps from "../../../components/editor/keys/GlobalKeyHand
 import toast from "react-hot-toast";
 
 export const Timeline = () => {
-    const { currentTime, timelineZoom, enableMarkerTracking, activeElement, activeElementIndex, mediaFiles, textElements, duration, isPlaying, isSnappingEnabled } = useAppSelector((state) => state.projectState);
+    const { currentTime, timelineZoom, enableMarkerTracking, activeElement, activeElementIndex, mediaFiles, textElements, duration, isPlaying, isSnappingEnabled, activeGap } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const timelineRef = useRef<HTMLDivElement>(null);
     const wasDragging = useRef(false);
@@ -217,6 +217,41 @@ export const Timeline = () => {
     };
 
     const handleDelete = () => {
+        if (activeElement === 'gap' && activeGap) {
+            const { start, end, trackType } = activeGap;
+            const gapDuration = end - start;
+    
+            if (trackType === 'video' || trackType === 'audio' || trackType === 'image') {
+                const updatedMediaFiles = mediaFiles.map(file => {
+                    if (file.type === trackType && file.positionStart >= end) {
+                        return {
+                            ...file,
+                            positionStart: file.positionStart - gapDuration,
+                            positionEnd: file.positionEnd - gapDuration,
+                        };
+                    }
+                    return file;
+                });
+                dispatch(setMediaFiles(updatedMediaFiles));
+            } else if (trackType === 'text') {
+                const updatedTextElements = textElements.map(text => {
+                    if (text.positionStart >= end) {
+                        return {
+                            ...text,
+                            positionStart: text.positionStart - gapDuration,
+                            positionEnd: text.positionEnd - gapDuration,
+                        };
+                    }
+                    return text;
+                });
+                dispatch(setTextElements(updatedTextElements));
+            }
+            
+            dispatch(setActiveElement(null));
+            toast.success('Gap deleted.');
+            return;
+        }
+
         // @ts-ignore
         let element = null;
         let elements = null;
@@ -502,9 +537,10 @@ export const Timeline = () => {
             <div
                 className="relative overflow-x-auto w-full border-t border-gray-800 bg-[#1E1D21] z-10"
                 ref={timelineRef}
-                onClick={handleTimelineClick}
             >
-                <Header onDragStart={handleDragStart} />
+                <div onMouseDown={handleDragStart} onClick={handleTimelineClick}>
+                    <Header />
+                </div>
 
                 <div className="bg-[#1E1D21]" style={{ width: "100%" }}>
                     <div

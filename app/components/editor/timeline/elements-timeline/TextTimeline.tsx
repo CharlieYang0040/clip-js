@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useMemo } from "react";
 import Moveable, { OnScale, OnDrag, OnResize, OnRotate } from "react-moveable";
 import { useAppSelector } from "@/app/store";
-import { setActiveElement, setActiveElementIndex, setTextElements, updateTextElements_INTERNAL } from "@/app/store/slices/projectSlice";
+import { setActiveElement, setActiveElementIndex, setTextElements, updateTextElements_INTERNAL, setActiveGap } from "@/app/store/slices/projectSlice";
 import { memo, useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
@@ -14,7 +14,7 @@ const MIN_DURATION = 0.1;
 
 export default function TextTimeline() {
     const targetRefs = useRef<Record<string, HTMLDivElement | null>>({});
-    const { mediaFiles, textElements, activeElement, activeElementIndex, timelineZoom, isSnappingEnabled } = useAppSelector((state) => state.projectState);
+    const { mediaFiles, textElements, activeElement, activeElementIndex, timelineZoom, isSnappingEnabled, activeGap } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const moveableRef = useRef<Record<string, Moveable | null>>({});
 
@@ -22,6 +22,23 @@ export default function TextTimeline() {
     useEffect(() => {
         textElementsRef.current = textElements;
     }, [textElements]);
+
+    const sortedTextElements = useMemo(() =>
+        [...textElements].sort((a, b) => a.positionStart - b.positionStart),
+        [textElements]
+    );
+
+    const gaps = useMemo(() => {
+        const calculatedGaps: { start: number, end: number }[] = [];
+        let lastEnd = 0;
+        for (const element of sortedTextElements) {
+            if (element.positionStart > lastEnd) {
+                calculatedGaps.push({ start: lastEnd, end: element.positionStart });
+            }
+            lastEnd = Math.max(lastEnd, element.positionEnd);
+        }
+        return calculatedGaps;
+    }, [sortedTextElements]);
 
     const getSnapPoints = useCallback((excludeId: string) => {
         if (!isSnappingEnabled) return [];
@@ -74,6 +91,12 @@ export default function TextTimeline() {
             const actualIndex = textElements.findIndex(clip => clip.id === index as unknown as string);
             dispatch(setActiveElementIndex(actualIndex));
         }
+    };
+
+    const handleGapClick = (gap: { start: number, end: number }, e: React.MouseEvent) => {
+        e.stopPropagation();
+        dispatch(setActiveElement('gap'));
+        dispatch(setActiveGap({ ...gap, trackType: 'text' }));
     };
 
     const handleDrag = (clip: TextElement, target: HTMLElement, left: number) => {
@@ -183,9 +206,20 @@ export default function TextTimeline() {
     }, [timelineZoom, textElements]);
 
     return (
-        <div >
-            {textElements.map((clip, index) => (
-                <div key={clip.id} className="bg-green-500">
+        <div className="relative h-full">
+            {gaps.map((gap, index) => (
+                <div
+                    key={`gap-text-${index}`}
+                    className={`absolute top-0 h-full z-0 ${activeElement === 'gap' && activeGap?.trackType === 'text' && activeGap?.start === gap.start ? 'bg-yellow-500 bg-opacity-30 border-2 border-yellow-500' : 'hover:bg-gray-500 hover:bg-opacity-20'}`}
+                    style={{
+                        left: `${gap.start * timelineZoom}px`,
+                        width: `${(gap.end - gap.start) * timelineZoom}px`,
+                    }}
+                    onClick={(e) => handleGapClick(gap, e)}
+                />
+            ))}
+            {sortedTextElements.map((clip, index) => (
+                <div key={clip.id} className="relative z-10">
                     <div
                         key={clip.id}
                         ref={(el: HTMLDivElement | null) => {

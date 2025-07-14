@@ -85,7 +85,6 @@ const getMediaDuration = (file: File): Promise<number> => {
         media.src = URL.createObjectURL(file);
         media.addEventListener('loadedmetadata', () => {
             resolve(media.duration);
-            URL.revokeObjectURL(media.src);
         });
         media.load();
     });

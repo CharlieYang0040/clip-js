@@ -80,7 +80,7 @@ export interface ExportConfig {
     includeSubtitles: boolean; // TODO: add this as an option
 }
 
-export type ActiveElement = 'media' | 'text' | 'export';
+export type ActiveElement = 'media' | 'text' | 'gap' | 'export';
 
 
 export interface ProjectState {
@@ -96,13 +96,13 @@ export interface ProjectState {
     timelineZoom: number;
     enableMarkerTracking: boolean;
     isSnappingEnabled: boolean;
-    projectName: string;
-    createdAt: string;
-    lastModified: string;
     activeSection: ActiveElement;
     activeElement: ActiveElement | null;
     activeElementIndex: number;
-
+    activeGap: { start: number, end: number, trackType: 'video' | 'audio' | 'image' | 'text' } | null;
+    projectName: string;
+    createdAt: string;
+    lastModified: string;
     resolution: { width: number; height: number };
     fps: number;
     aspectRatio: string;

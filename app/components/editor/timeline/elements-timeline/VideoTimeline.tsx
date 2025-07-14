@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useMemo } from "react";
 import Moveable from "react-moveable";
 import { useAppSelector } from "@/app/store";
-import { setActiveElement, setActiveElementIndex, setMediaFiles } from "@/app/store/slices/projectSlice";
+import { setActiveElement, setActiveElementIndex, setMediaFiles, setActiveGap } from "@/app/store/slices/projectSlice";
 import { memo, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
@@ -13,7 +13,7 @@ const SNAP_THRESHOLD = 5; // in pixels
 
 export default function VideoTimeline() {
     const targetRefs = useRef<Record<string, HTMLDivElement | null>>({});
-    const { mediaFiles, textElements, activeElement, activeElementIndex, timelineZoom, isSnappingEnabled } = useAppSelector((state) => state.projectState);
+    const { mediaFiles, textElements, activeElement, activeElementIndex, timelineZoom, isSnappingEnabled, activeGap } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const moveableRef = useRef<Record<string, Moveable | null>>({});
 
@@ -23,6 +23,23 @@ export default function VideoTimeline() {
     useEffect(() => {
         mediaFilesRef.current = mediaFiles;
     }, [mediaFiles]);
+
+    const videoClips = useMemo(() =>
+        mediaFiles.filter(clip => clip.type === 'video').sort((a, b) => a.positionStart - b.positionStart),
+        [mediaFiles]
+    );
+
+    const gaps = useMemo(() => {
+        const calculatedGaps: { start: number, end: number }[] = [];
+        let lastEnd = 0;
+        for (const element of videoClips) {
+            if (element.positionStart > lastEnd) {
+                calculatedGaps.push({ start: lastEnd, end: element.positionStart });
+            }
+            lastEnd = Math.max(lastEnd, element.positionEnd);
+        }
+        return calculatedGaps;
+    }, [videoClips]);
 
     const getSnapPoints = useCallback((excludeId: string) => {
         if (!isSnappingEnabled) return [];
@@ -64,6 +81,12 @@ export default function VideoTimeline() {
             const actualIndex = mediaFiles.findIndex(clip => clip.id === index as unknown as string);
             dispatch(setActiveElementIndex(actualIndex));
         }
+    };
+
+    const handleGapClick = (gap: { start: number, end: number }, e: React.MouseEvent) => {
+        e.stopPropagation();
+        dispatch(setActiveElement('gap'));
+        dispatch(setActiveGap({ ...gap, trackType: 'video' }));
     };
 
     const handleDrag = useCallback((target: HTMLElement, left: number) => {
@@ -153,11 +176,21 @@ export default function VideoTimeline() {
     }, [timelineZoom, mediaFiles]);
 
     return (
-        <div >
-            {mediaFiles
-                .filter((clip) => clip.type === 'video')
+        <div className="relative h-full">
+            {gaps.map((gap, index) => (
+                <div
+                    key={`gap-video-${index}`}
+                    className={`absolute top-0 h-full z-0 ${activeElement === 'gap' && activeGap?.trackType === 'video' && activeGap?.start === gap.start ? 'bg-yellow-500 bg-opacity-30 border-2 border-yellow-500' : 'hover:bg-gray-500 hover:bg-opacity-20'}`}
+                    style={{
+                        left: `${gap.start * timelineZoom}px`,
+                        width: `${(gap.end - gap.start) * timelineZoom}px`,
+                    }}
+                    onClick={(e) => handleGapClick(gap, e)}
+                />
+            ))}
+            {videoClips
                 .map((clip) => (
-                    <div key={clip.id}>
+                    <div key={clip.id} className="relative z-10">
                         <div
                             key={clip.id}
                             ref={(el: HTMLDivElement | null) => {
