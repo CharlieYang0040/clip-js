@@ -1,12 +1,15 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import { useAppSelector } from '../../../store';
 
 export const Header = ({ onDragStart }: { onDragStart: (e: React.MouseEvent<HTMLDivElement>) => void }) => {
-    const { duration, currentTime, timelineZoom, enableMarkerTracking } = useAppSelector((state) => state.projectState);
+    const { duration, timelineZoom } = useAppSelector((state) => state.projectState);
 
     const { tickInterval, majorTickMultiplier, labelPrecision } = useMemo(() => {
-        if (timelineZoom < 3) return { tickInterval: 30, majorTickMultiplier: 2, labelPrecision: 0 };   // Every 30s, major every 60s
-        if (timelineZoom < 6) return { tickInterval: 15, majorTickMultiplier: 2, labelPrecision: 0 };   // Every 15s, major every 30s
+        if (timelineZoom < 2) return { tickInterval: 45, majorTickMultiplier: 2, labelPrecision: 0 };    // Every 45s, major every 90s
+        if (timelineZoom < 3) return { tickInterval: 30, majorTickMultiplier: 2, labelPrecision: 0 };    // Every 30s, major every 60s
+        if (timelineZoom < 4) return { tickInterval: 20, majorTickMultiplier: 3, labelPrecision: 0 };    // Every 20s, major every 60s
+        if (timelineZoom < 5) return { tickInterval: 15, majorTickMultiplier: 2, labelPrecision: 0 };    // Every 15s, major every 30s
+        if (timelineZoom < 6) return { tickInterval: 12, majorTickMultiplier: 2.5, labelPrecision: 0 };  // Every 12s, major every 30s
         if (timelineZoom < 10) return { tickInterval: 10, majorTickMultiplier: 2, labelPrecision: 0 };  // Every 10s, major every 20s
         if (timelineZoom < 15) return { tickInterval: 5, majorTickMultiplier: 2, labelPrecision: 0 };   // Every 5s,  major every 10s
         if (timelineZoom < 25) return { tickInterval: 2, majorTickMultiplier: 2.5, labelPrecision: 0 }; // Every 2s,  major every 5s
@@ -21,20 +24,9 @@ export const Header = ({ onDragStart }: { onDragStart: (e: React.MouseEvent<HTML
     const totalSeconds = Math.max(duration + 2, 61);
     const tickMarkers = Array.from({ length: Math.ceil(totalSeconds / tickInterval) }, (_, i) => i * tickInterval);
 
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (containerRef.current && enableMarkerTracking) {
-            const markerLeft = currentTime * timelineZoom;
-            const containerWidth = containerRef.current.offsetWidth;
-            containerRef.current.scrollLeft = markerLeft - containerWidth / 2;
-        }
-    }, [currentTime, timelineZoom, enableMarkerTracking]);
-
     return (
         <div
             className="flex items-center py-2 w-full cursor-ew-resize"
-            ref={containerRef}
             onMouseDown={onDragStart}
         >
             <div className="relative h-8">

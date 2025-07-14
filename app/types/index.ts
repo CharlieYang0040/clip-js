@@ -95,6 +95,7 @@ export interface ProjectState {
     zoomLevel: number;
     timelineZoom: number;
     enableMarkerTracking: boolean;
+    isSnappingEnabled: boolean;
     projectName: string;
     createdAt: string;
     lastModified: string;

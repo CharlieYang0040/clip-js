@@ -16,6 +16,7 @@ export const initialState: ProjectState = {
     zoomLevel: 1,
     timelineZoom: 100,
     enableMarkerTracking: true,
+    isSnappingEnabled: true,
     activeSection: 'media',
     activeElement: null,
     activeElementIndex: 0,
@@ -146,7 +147,10 @@ const projectStateSlice = createSlice({
         setMediaFiles: (state, action: PayloadAction<MediaFile[]>) => {
             addToHistory(state);
             state.mediaFiles = action.payload;
-            // Calculate duration based on the last video's end time
+            state.duration = calculateTotalDuration(state.mediaFiles, state.textElements);
+        },
+        updateMediaFiles_INTERNAL: (state, action: PayloadAction<MediaFile[]>) => {
+            state.mediaFiles = action.payload;
             state.duration = calculateTotalDuration(state.mediaFiles, state.textElements);
         },
         setProjectName: (state, action: PayloadAction<string>) => {
@@ -164,6 +168,10 @@ const projectStateSlice = createSlice({
 
         setTextElements: (state, action: PayloadAction<TextElement[]>) => {
             addToHistory(state);
+            state.textElements = action.payload;
+            state.duration = calculateTotalDuration(state.mediaFiles, state.textElements);
+        },
+        updateTextElements_INTERNAL: (state, action: PayloadAction<TextElement[]>) => {
             state.textElements = action.payload;
             state.duration = calculateTotalDuration(state.mediaFiles, state.textElements);
         },
@@ -209,6 +217,9 @@ const projectStateSlice = createSlice({
         setMarkerTrack: (state, action: PayloadAction<boolean>) => {
             state.enableMarkerTracking = action.payload;
         },
+        setSnapMode: (state, action: PayloadAction<boolean>) => {
+            state.isSnappingEnabled = action.payload;
+        },
         // Special reducer for rehydrating state from IndexedDB
         rehydrate: (state, action: PayloadAction<ProjectState>) => {
             return { ...state, ...action.payload };
@@ -224,7 +235,9 @@ export const {
     redo,
     clearHistory,
     setMediaFiles,
+    updateMediaFiles_INTERNAL,
     setTextElements,
+    updateTextElements_INTERNAL,
     setCurrentTime,
     setProjectName,
     setIsPlaying,
@@ -237,6 +250,7 @@ export const {
     setMarkerTrack,
     setIsMuted,
     setActiveSection,
+    setSnapMode,
     setActiveElement,
     setActiveElementIndex,
     setTimelineZoom,

@@ -1,5 +1,5 @@
 import { useAppSelector } from "@/app/store";
-import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setActiveElement } from "@/app/store/slices/projectSlice";
+import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setActiveElement, setSnapMode } from "@/app/store/slices/projectSlice";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
@@ -13,13 +13,16 @@ import GlobalKeyHandlerProps from "../../../components/editor/keys/GlobalKeyHand
 import toast from "react-hot-toast";
 
 export const Timeline = () => {
-    const { currentTime, timelineZoom, enableMarkerTracking, activeElement, activeElementIndex, mediaFiles, textElements, duration, isPlaying } = useAppSelector((state) => state.projectState);
+    const { currentTime, timelineZoom, enableMarkerTracking, activeElement, activeElementIndex, mediaFiles, textElements, duration, isPlaying, isSnappingEnabled } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const timelineRef = useRef<HTMLDivElement>(null);
+    const wasDragging = useRef(false);
     const [isDraggingMarker, setIsDraggingMarker] = useState(false);
     const [dragStartX, setDragStartX] = useState(0);
     const [initialTime, setInitialTime] = useState(0);
     const [localCurrentTime, setLocalCurrentTime] = useState(currentTime);
+    const prevZoomRef = useRef(timelineZoom);
+    const lastDragX = useRef(0);
 
     const animationFrameRef = useRef<number | null>(null);
 
@@ -29,6 +32,32 @@ export const Timeline = () => {
         }, 100),
         [dispatch]
     );
+
+    useEffect(() => {
+        if (timelineRef.current && enableMarkerTracking) {
+            const markerLeft = currentTime * timelineZoom;
+            const containerWidth = timelineRef.current.offsetWidth;
+            timelineRef.current.scrollLeft = markerLeft - containerWidth / 2;
+        }
+    }, [currentTime, timelineZoom, enableMarkerTracking]);
+
+    useEffect(() => {
+        const timeline = timelineRef.current;
+        if (!timeline) return;
+
+        const oldZoom = prevZoomRef.current;
+        const newZoom = timelineZoom;
+
+        if (oldZoom === newZoom) return;
+
+        const markerPositionPx = currentTime * oldZoom;
+        const newMarkerPositionPx = currentTime * newZoom;
+        const scrollOffset = newMarkerPositionPx - markerPositionPx;
+
+        timeline.scrollLeft += scrollOffset;
+
+        prevZoomRef.current = newZoom;
+    }, [timelineZoom, currentTime]);
 
     useEffect(() => {
         if (!isDraggingMarker) {
@@ -221,59 +250,71 @@ export const Timeline = () => {
     };
 
     const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!timelineRef.current || isDraggingMarker) return;
-        dispatch(setIsPlaying(false));
-        const rect = timelineRef.current.getBoundingClientRect();
-        const scrollOffset = timelineRef.current.scrollLeft;
-        const offsetX = e.clientX - rect.left + scrollOffset;
-        const seconds = offsetX / timelineZoom;
-        const clampedTime = Math.max(0, Math.min(duration, seconds));
-        dispatch(setCurrentTime(clampedTime));
-        setLocalCurrentTime(clampedTime);
+        if (wasDragging.current) {
+            return;
+        }
+        if (timelineRef.current) {
+            const rect = timelineRef.current.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const scrollLeft = timelineRef.current.scrollLeft;
+            const time = (x + scrollLeft) / timelineZoom;
+            dispatch(setCurrentTime(Math.max(0, time)));
+            dispatch(setActiveElement(null));
+        }
     };
 
     const handleDragStart = (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!timelineRef.current) return;
-
-        const rect = timelineRef.current.getBoundingClientRect();
-        const scrollOffset = timelineRef.current.scrollLeft;
-        const offsetX = e.clientX - rect.left + scrollOffset;
-        const newTime = Math.max(0, Math.min(duration, offsetX / timelineZoom));
-
-        dispatch(setIsPlaying(false));
+        wasDragging.current = false;
         setIsDraggingMarker(true);
         setDragStartX(e.clientX);
-        setInitialTime(newTime);
-        setLocalCurrentTime(newTime);
-        smoothTimeUpdate(newTime);
+        lastDragX.current = e.clientX;
 
-        document.body.style.cursor = 'ew-resize';
-        document.body.style.userSelect = 'none';
+        if (timelineRef.current) {
+            const rect = timelineRef.current.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const scrollLeft = timelineRef.current.scrollLeft;
+            const time = (x + scrollLeft) / timelineZoom;
+            const newTime = Math.max(0, time);
+
+            setInitialTime(newTime);
+            setLocalCurrentTime(newTime);
+            smoothTimeUpdate(newTime);
+        } else {
+            setInitialTime(currentTime);
+        }
+
+        if (isPlaying) {
+            dispatch(setIsPlaying(false));
+        }
     };
 
     const handleDragMove = useCallback((e: MouseEvent) => {
-        if (!isDraggingMarker || !timelineRef.current) return;
-
-        const deltaX = e.clientX - dragStartX;
-        const deltaTime = deltaX / timelineZoom;
-        const newTime = Math.max(0, Math.min(duration, initialTime + deltaTime));
-
-        setLocalCurrentTime(newTime);
-        smoothTimeUpdate(newTime);
-    }, [isDraggingMarker, dragStartX, timelineZoom, initialTime, duration, smoothTimeUpdate]);
-
-    const handleDragEnd = useCallback(() => {
         if (!isDraggingMarker) return;
 
-        setIsDraggingMarker(false);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        if (animationFrameRef.current) {
-            cancelAnimationFrame(animationFrameRef.current);
+        wasDragging.current = true;
+
+        if (enableMarkerTracking) {
+            const dx = e.clientX - lastDragX.current;
+            const dt = dx / timelineZoom;
+            const newTime = Math.max(0, localCurrentTime + dt);
+
+            lastDragX.current = e.clientX;
+
+            setLocalCurrentTime(newTime);
+            smoothTimeUpdate(newTime);
+        } else {
+            const deltaX = e.clientX - dragStartX;
+            const deltaTime = deltaX / timelineZoom;
+            const newTime = Math.max(0, initialTime + deltaTime);
+
+            setLocalCurrentTime(newTime);
+            smoothTimeUpdate(newTime);
         }
-    }, [isDraggingMarker]);
+    }, [isDraggingMarker, dragStartX, timelineZoom, initialTime, smoothTimeUpdate, enableMarkerTracking, localCurrentTime]);
+
+    const handleDragEnd = useCallback(() => {
+        setIsDraggingMarker(false);
+    }, []);
 
     useEffect(() => {
         if (isDraggingMarker) {
@@ -343,6 +384,46 @@ export const Timeline = () => {
                                 </div>
                                 <div className="text-gray-400 text-[10px] mt-1">
                                     Press 'T' to toggle
+                                </div>
+                            </div>
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                        </div>
+                    </div>
+
+                    {/* Snap Mode */}
+                    <div className="relative group">
+                        <button
+                            onClick={() => dispatch(setSnapMode(!isSnappingEnabled))}
+                            className={`${
+                                isSnappingEnabled
+                                    ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-500/25'
+                                    : 'bg-white border-transparent text-gray-800 hover:bg-[#ccc]'
+                            } border rounded-md transition-all duration-200 flex flex-row items-center justify-center dark:hover:bg-[#ccc] mt-2 font-medium text-sm sm:text-base h-auto px-2 py-1 sm:w-auto`}
+                        >
+                            <Image
+                                alt="Snap Mode"
+                                className="h-auto w-auto max-w-[20px] max-h-[20px]"
+                                height={30}
+                                width={30}
+                                src="https://www.svgrepo.com/show/509160/magnet.svg"
+                            />
+                            <span className="ml-2">
+                                Snap
+                                {isSnappingEnabled && (
+                                    <span className="ml-1 inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                                )}
+                            </span>
+                        </button>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap border border-gray-700">
+                            <div className="text-center">
+                                <div className="font-semibold mb-1">
+                                    {isSnappingEnabled ? '🧲 Snap Mode: ON' : '⭕ Snap Mode: OFF'}
+                                </div>
+                                <div className="text-gray-300">
+                                    {isSnappingEnabled
+                                        ? 'Elements will snap to each other.'
+                                        : 'Free element movement.'
+                                    }
                                 </div>
                             </div>
                             <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>

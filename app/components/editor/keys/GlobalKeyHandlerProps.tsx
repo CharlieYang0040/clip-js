@@ -72,12 +72,26 @@ const GlobalKeyHandler = ({ handleDuplicate, handleSplit, handleDelete }: Global
     }, [dispatch]);
 
     const handleZoomIn = useCallback(() => {
-        const newZoom = Math.min(timelineZoomRef.current + 50, 1000);
+        const currentZoom = timelineZoomRef.current;
+        let step = 50;
+        if (currentZoom < 10) {
+            step = 1;
+        } else if (currentZoom < 100) {
+            step = 10;
+        }
+        const newZoom = Math.min(currentZoom + step, 1000);
         dispatch(setTimelineZoom(newZoom));
     }, [dispatch]);
 
     const handleZoomOut = useCallback(() => {
-        const newZoom = Math.max(timelineZoomRef.current - 50, 1);
+        const currentZoom = timelineZoomRef.current;
+        let step = 50;
+        if (currentZoom <= 10) {
+            step = 1;
+        } else if (currentZoom <= 100) {
+            step = 10;
+        }
+        const newZoom = Math.max(currentZoom - step, 1);
         dispatch(setTimelineZoom(newZoom));
     }, [dispatch]);
 

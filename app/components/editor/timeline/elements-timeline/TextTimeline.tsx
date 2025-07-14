@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useMemo } from "react";
 import Moveable, { OnScale, OnDrag, OnResize, OnRotate } from "react-moveable";
 import { useAppSelector } from "@/app/store";
-import { setActiveElement, setActiveElementIndex, setTextElements } from "@/app/store/slices/projectSlice";
+import { setActiveElement, setActiveElementIndex, setTextElements, updateTextElements_INTERNAL } from "@/app/store/slices/projectSlice";
 import { memo, useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
@@ -9,26 +9,44 @@ import Header from "../Header";
 import { MediaFile, TextElement } from "@/app/types";
 import { debounce, throttle } from "lodash";
 
+const SNAP_THRESHOLD = 5; // in pixels
+const MIN_DURATION = 0.1;
+
 export default function TextTimeline() {
     const targetRefs = useRef<Record<string, HTMLDivElement | null>>({});
-    const { textElements, activeElement, activeElementIndex, timelineZoom } = useAppSelector((state) => state.projectState);
+    const { mediaFiles, textElements, activeElement, activeElementIndex, timelineZoom, isSnappingEnabled } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const moveableRef = useRef<Record<string, Moveable | null>>({});
 
-
-    // this affect the performance cause of too much re-renders
-
-    // const onUpdateMedia = (id: string, updates: Partial<MediaFile>) => {
-    //     dispatch(setMediaFiles(mediaFiles.map(media =>
-    //         media.id === id ? { ...media, ...updates } : media
-    //     )));
-    // };
-
-    // TODO: this is a hack to prevent the mediaFiles from being updated too often while dragging or resizing
     const textElementsRef = useRef(textElements);
     useEffect(() => {
         textElementsRef.current = textElements;
     }, [textElements]);
+
+    const getSnapPoints = useCallback((excludeId: string) => {
+        if (!isSnappingEnabled) return [];
+        const points: number[] = [];
+        mediaFiles.forEach(clip => {
+            points.push(clip.positionStart, clip.positionEnd);
+        });
+        textElements.forEach(text => {
+            if (text.id !== excludeId) {
+                points.push(text.positionStart, text.positionEnd);
+            }
+        });
+        return points;
+    }, [mediaFiles, textElements, isSnappingEnabled]);
+
+    const getSnapPosition = useCallback((position: number, snapPoints: number[]) => {
+        if (!isSnappingEnabled) return position;
+        for (const point of snapPoints) {
+            if (Math.abs(position - (point * timelineZoom)) < SNAP_THRESHOLD) {
+                return point * timelineZoom;
+            }
+        }
+        return position;
+    }, [timelineZoom, isSnappingEnabled]);
+
 
     const onUpdateText = useMemo(() =>
         throttle((id: string, updates: Partial<TextElement>) => {
@@ -36,45 +54,116 @@ export default function TextTimeline() {
             const updated = currentFiles.map(text =>
                 text.id === id ? { ...text, ...updates } : text
             );
-            dispatch(setTextElements(updated));
+            dispatch(updateTextElements_INTERNAL(updated));
         }, 100), [dispatch]
+    );
+
+    const finalUpdateText = useMemo(() =>
+        debounce((id: string, updates: Partial<TextElement>) => {
+            const currentFiles = textElementsRef.current;
+            const updated = currentFiles.map(text =>
+                text.id === id ? { ...text, ...updates } : text
+            );
+            dispatch(setTextElements(updated));
+        }, 50), [dispatch]
     );
 
     const handleClick = (element: string, index: number | string) => {
         if (element === 'text') {
             dispatch(setActiveElement('text') as any);
-            // TODO: find better way to do this
             const actualIndex = textElements.findIndex(clip => clip.id === index as unknown as string);
             dispatch(setActiveElementIndex(actualIndex));
         }
     };
 
     const handleDrag = (clip: TextElement, target: HTMLElement, left: number) => {
-        // no negative left
-        const constrainedLeft = Math.max(left, 0);
+        if (!isSnappingEnabled) {
+            const constrainedLeft = Math.max(left, 0);
+            const newPositionStart = constrainedLeft / timelineZoom;
+            onUpdateText(clip.id, {
+                positionStart: newPositionStart,
+                positionEnd: (newPositionStart - clip.positionStart) + clip.positionEnd,
+            })
+    
+            target.style.left = `${constrainedLeft}px`;
+            return;
+        }
+
+        const snapPointsPx = getSnapPoints(clip.id).map(p => p * timelineZoom);
+        const durationPx = (clip.positionEnd - clip.positionStart) * timelineZoom;
+
+        const startPosition = left;
+        const endPosition = left + durationPx;
+
+        let snappedLeft = left;
+
+        let minStartDist = SNAP_THRESHOLD;
+        let minEndDist = SNAP_THRESHOLD;
+        let startSnapPos: number | null = null;
+        let endSnapPos: number | null = null;
+
+        for (const point of snapPointsPx) {
+            const startDist = Math.abs(startPosition - point);
+            if (startDist < minStartDist) {
+                minStartDist = startDist;
+                startSnapPos = point;
+            }
+
+            const endDist = Math.abs(endPosition - point);
+            if (endDist < minEndDist) {
+                minEndDist = endDist;
+                endSnapPos = point;
+            }
+        }
+
+        if (startSnapPos !== null && endSnapPos !== null) {
+            if (minStartDist <= minEndDist) {
+                snappedLeft = startSnapPos;
+            } else {
+                snappedLeft = endSnapPos - durationPx;
+            }
+        } else if (startSnapPos !== null) {
+            snappedLeft = startSnapPos;
+        } else if (endSnapPos !== null) {
+            snappedLeft = endSnapPos - durationPx;
+        }
+
+        const constrainedLeft = Math.max(snappedLeft, 0);
         const newPositionStart = constrainedLeft / timelineZoom;
+        const duration = clip.positionEnd - clip.positionStart;
+        
+        target.style.left = `${constrainedLeft}px`;
+        
         onUpdateText(clip.id, {
             positionStart: newPositionStart,
-            positionEnd: (newPositionStart - clip.positionStart) + clip.positionEnd,
-        })
-
-        target.style.left = `${constrainedLeft}px`;
+            positionEnd: newPositionStart + duration,
+        });
     };
 
     const handleRightResize = (clip: TextElement, target: HTMLElement, width: number) => {
-        const newPositionEnd = width / timelineZoom;
+        const snapPoints = getSnapPoints(clip.id);
+        const newWidth = getSnapPosition(clip.positionStart * timelineZoom + width, snapPoints.map(p => p * timelineZoom)) - (clip.positionStart * timelineZoom);
+
+        const newDuration = newWidth / timelineZoom;
+        const newPositionEnd = clip.positionStart + Math.max(newDuration, MIN_DURATION);
 
         onUpdateText(clip.id, {
-            positionEnd: clip.positionStart + newPositionEnd,
+            positionEnd: newPositionEnd,
         })
+        target.style.width = `${newWidth}px`;
     };
 
     const handleLeftResize = (clip: TextElement, target: HTMLElement, width: number, delta: number) => {
-        const currentLeft = parseFloat(target.style.left) || (clip.positionStart * timelineZoom);
-        const newLeft = Math.max(0, currentLeft + delta);
-        const newPositionStart = newLeft / timelineZoom;
+        const snapPoints = getSnapPoints(clip.id);
+        const currentLeftPx = clip.positionStart * timelineZoom;
+        let newLeftPx = currentLeftPx + delta;
 
-        const maxPositionStart = clip.positionEnd - 0.1; // MIN_DURATION
+        newLeftPx = getSnapPosition(newLeftPx, snapPoints.map(p => p * timelineZoom));
+
+        const constrainedLeftPx = Math.max(0, newLeftPx);
+        const newPositionStart = constrainedLeftPx / timelineZoom;
+
+        const maxPositionStart = clip.positionEnd - MIN_DURATION;
         const constrainedPositionStart = Math.min(newPositionStart, maxPositionStart);
 
         const newWidth = (clip.positionEnd - constrainedPositionStart) * timelineZoom;
@@ -91,7 +180,7 @@ export default function TextTimeline() {
         for (const clip of textElements) {
             moveableRef.current[clip.id]?.updateRect();
         }
-    }, [timelineZoom]);
+    }, [timelineZoom, textElements]);
 
     return (
         <div >
@@ -104,15 +193,14 @@ export default function TextTimeline() {
                                 targetRefs.current[clip.id] = el;
                             }
                         }}
-                        onClick={() => handleClick('text', clip.id)}
-                        className={`absolute border border-gray-500 border-opacity-50 rounded-md top-2 h-12 rounded bg-[#27272A] text-white text-sm flex items-center justify-center cursor-pointer ${activeElement === 'text' && textElements[activeElementIndex].id === clip.id ? 'bg-[#3F3F46] border-blue-500' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); handleClick('text', clip.id); }}
+                        className={`absolute border border-gray-500 border-opacity-50 rounded-md top-2 h-12 rounded bg-[#27272A] text-white text-sm flex items-center justify-center cursor-pointer ${activeElement === 'text' && textElements[activeElementIndex]?.id === clip.id ? 'bg-[#3F3F46] border-blue-500' : ''}`}
                         style={{
                             left: `${clip.positionStart * timelineZoom}px`,
                             width: `${(clip.positionEnd - clip.positionStart) * timelineZoom}px`,
                             zIndex: clip.zIndex,
                         }}
                     >
-                        {/* <MoveableTimeline /> */}
                         <Image
                             alt="Text"
                             className="h-7 w-7 min-w-6 mr-2 flex-shrink-0"
@@ -137,43 +225,49 @@ export default function TextTimeline() {
                         throttleDrag={0}
                         rotatable={false}
                         onDragStart={({ target, clientX, clientY }) => {
+                            handleClick('text', clip.id);
                         }}
                         onDrag={({
                             target,
-                            beforeDelta, beforeDist,
                             left,
-                            right,
-                            delta, dist,
-                            transform,
                         }: OnDrag) => {
-                            handleClick('text', clip.id)
                             handleDrag(clip, target as HTMLElement, left);
                         }}
                         onDragEnd={({ target, isDrag, clientX, clientY }) => {
+                            const currentLeft = parseFloat((target as HTMLElement).style.left) || 0;
+                            const newPositionStart = currentLeft / timelineZoom;
+                            const duration = clip.positionEnd - clip.positionStart;
+                            finalUpdateText(clip.id, {
+                                positionStart: newPositionStart,
+                                positionEnd: newPositionStart + duration,
+                            });
                         }}
 
-                        /* resizable*/
                         resizable={true}
                         throttleResize={0}
                         onResizeStart={({ target, clientX, clientY }) => {
+                            handleClick('text', clip.id);
                         }}
                         onResize={({
                             target, width,
                             delta, direction, drag
                         }: OnResize) => {
                             if (direction[0] === 1) {
-                                // Right resize
-                                handleClick('text', clip.id)
-                                delta[0] && (target!.style.width = `${width}px`);
                                 handleRightResize(clip, target as HTMLElement, width);
                             }
                             else if (direction[0] === -1) {
-                                // Left resize
-                                handleClick('text', clip.id)
                                 handleLeftResize(clip, target as HTMLElement, width, drag.delta[0]);
                             }
                         }}
                         onResizeEnd={({ target, isDrag, clientX, clientY }) => {
+                            const currentLeft = parseFloat((target as HTMLElement).style.left) || 0;
+                            const currentWidth = parseFloat((target as HTMLElement).style.width) || 0;
+                            const newPositionStart = currentLeft / timelineZoom;
+                            const newDuration = currentWidth / timelineZoom;
+                            finalUpdateText(clip.id, {
+                                positionStart: newPositionStart,
+                                positionEnd: newPositionStart + newDuration,
+                            });
                         }}
 
                     />

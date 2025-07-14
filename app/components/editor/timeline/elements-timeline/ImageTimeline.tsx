@@ -1,41 +1,53 @@
 import React, { useRef, useCallback, useMemo } from "react";
-import Moveable, { OnScale, OnDrag, OnResize, OnRotate } from "react-moveable";
+import Moveable from "react-moveable";
 import { useAppSelector } from "@/app/store";
 import { setActiveElement, setActiveElementIndex, setMediaFiles } from "@/app/store/slices/projectSlice";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
 import Header from "../Header";
 import { MediaFile } from "@/app/types";
-import { debounce, throttle } from "lodash";
+import { debounce } from "lodash";
+
+const SNAP_THRESHOLD = 5; // in pixels
 
 export default function ImageTimeline() {
     const targetRefs = useRef<Record<string, HTMLDivElement | null>>({});
-    const { mediaFiles, textElements, activeElement, activeElementIndex, timelineZoom } = useAppSelector((state) => state.projectState);
+    const { mediaFiles, textElements, activeElement, activeElementIndex, timelineZoom, isSnappingEnabled } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const moveableRef = useRef<Record<string, Moveable | null>>({});
 
-    // Minimum duration in seconds to prevent clips from becoming too small
     const MIN_DURATION = 0.1;
 
-    // TODO: this is a hack to prevent the mediaFiles from being updated too often while dragging or resizing
     const mediaFilesRef = useRef(mediaFiles);
     useEffect(() => {
         mediaFilesRef.current = mediaFiles;
     }, [mediaFiles]);
 
-    // More aggressive throttling for smooth performance
-    const onUpdateMedia = useMemo(() =>
-        throttle((id: string, updates: Partial<MediaFile>) => {
-            const currentFiles = mediaFilesRef.current;
-            const updated = currentFiles.map(media =>
-                media.id === id ? { ...media, ...updates } : media
-            );
-            dispatch(setMediaFiles(updated));
-        }, 16), [dispatch]
-    );
+    const getSnapPoints = useCallback((excludeId: string) => {
+        if (!isSnappingEnabled) return [];
+        const points: number[] = [];
+        mediaFiles.forEach(clip => {
+            if (clip.id !== excludeId) {
+                points.push(clip.positionStart, clip.positionEnd);
+            }
+        });
+        textElements.forEach(text => {
+            points.push(text.positionStart, text.positionEnd);
+        });
+        return points;
+    }, [mediaFiles, textElements, isSnappingEnabled]);
 
-    // Debounced update for final position
+    const getSnapPosition = useCallback((position: number, snapPoints: number[]) => {
+        if (!isSnappingEnabled) return position;
+        for (const point of snapPoints) {
+            if (Math.abs(position - (point * timelineZoom)) < SNAP_THRESHOLD) {
+                return point * timelineZoom;
+            }
+        }
+        return position;
+    }, [timelineZoom, isSnappingEnabled]);
+
     const finalUpdateMedia = useMemo(() =>
         debounce((id: string, updates: Partial<MediaFile>) => {
             const currentFiles = mediaFilesRef.current;
@@ -49,70 +61,95 @@ export default function ImageTimeline() {
     const handleClick = (element: string, index: number | string) => {
         if (element === 'media') {
             dispatch(setActiveElement('media') as any);
-            // TODO: cause we pass id when media to find the right index i will change this later (this happens cause each timeline pass its index not index from mediaFiles array)
             const actualIndex = mediaFiles.findIndex(clip => clip.id === index as unknown as string);
             dispatch(setActiveElementIndex(actualIndex));
         }
     };
 
-    const handleDrag = useCallback((clip: MediaFile, target: HTMLElement, left: number) => {
-        // no negative left
-        const constrainedLeft = Math.max(left, 0);
-        const newPositionStart = constrainedLeft / timelineZoom;
-        const duration = clip.positionEnd - clip.positionStart;
-        
-        // Update visual immediately
+    const handleDrag = useCallback((target: HTMLElement, left: number) => {
+        if (!isSnappingEnabled) {
+            const constrainedLeft = Math.max(left, 0);
+            target.style.left = `${constrainedLeft}px`;
+            return;
+        }
+
+        const snapPointsPx = getSnapPoints(target.id).map(p => p * timelineZoom);
+        const durationPx = target.offsetWidth;
+
+        const startPosition = left;
+        const endPosition = left + durationPx;
+
+        let snappedLeft = left;
+
+        let minStartDist = SNAP_THRESHOLD;
+        let minEndDist = SNAP_THRESHOLD;
+        let startSnapPos: number | null = null;
+        let endSnapPos: number | null = null;
+
+        for (const point of snapPointsPx) {
+            const startDist = Math.abs(startPosition - point);
+            if (startDist < minStartDist) {
+                minStartDist = startDist;
+                startSnapPos = point;
+            }
+
+            const endDist = Math.abs(endPosition - point);
+            if (endDist < minEndDist) {
+                minEndDist = endDist;
+                endSnapPos = point;
+            }
+        }
+
+        if (startSnapPos !== null && endSnapPos !== null) {
+            if (minStartDist <= minEndDist) {
+                snappedLeft = startSnapPos;
+            } else {
+                snappedLeft = endSnapPos - durationPx;
+            }
+        } else if (startSnapPos !== null) {
+            snappedLeft = startSnapPos;
+        } else if (endSnapPos !== null) {
+            snappedLeft = endSnapPos - durationPx;
+        }
+
+        const constrainedLeft = Math.max(snappedLeft, 0);
         target.style.left = `${constrainedLeft}px`;
-        
-        // Throttled state update
-        onUpdateMedia(clip.id, {
-            positionStart: newPositionStart,
-            positionEnd: newPositionStart + duration,
-        });
-    }, [timelineZoom, onUpdateMedia]);
+    }, [timelineZoom, getSnapPoints, isSnappingEnabled]);
 
     const handleRightResize = useCallback((clip: MediaFile, target: HTMLElement, width: number) => {
-        const newDuration = width / timelineZoom;
-        const newPositionEnd = clip.positionStart + Math.max(newDuration, MIN_DURATION);
+        if (!isSnappingEnabled) {
+            target.style.width = `${width}px`;
+            return;
+        }
 
-        // Update visual immediately
-        target.style.width = `${width}px`;
-
-        // For images, just update the end time to match position
-        onUpdateMedia(clip.id, {
-            positionEnd: newPositionEnd,
-            endTime: newPositionEnd,
-        });
-    }, [timelineZoom, onUpdateMedia, MIN_DURATION]);
-
-    const handleLeftResize = useCallback((clip: MediaFile, target: HTMLElement, width: number, delta: number[]) => {
-        // Calculate new position based on delta change
-        const currentLeft = parseFloat(target.style.left) || (clip.positionStart * timelineZoom);
-        const newLeft = Math.max(0, currentLeft + delta[0]);
-        const newPositionStart = newLeft / timelineZoom;
-        
-        // Ensure minimum duration
-        const maxPositionStart = clip.positionEnd - MIN_DURATION;
-        const constrainedPositionStart = Math.min(newPositionStart, maxPositionStart);
-
-        // Update visual position and width immediately
-        const newWidth = (clip.positionEnd - constrainedPositionStart) * timelineZoom;
-        target.style.left = `${constrainedPositionStart * timelineZoom}px`;
+        const snapPoints = getSnapPoints(clip.id);
+        const newWidth = getSnapPosition(clip.positionStart * timelineZoom + width, snapPoints.map(p => p * timelineZoom)) - (clip.positionStart * timelineZoom);
         target.style.width = `${newWidth}px`;
+    }, [timelineZoom, getSnapPoints, getSnapPosition, isSnappingEnabled]);
 
-        // For images, we don't need complex startTime/endTime calculations
-        // Just update the position
-        onUpdateMedia(clip.id, {
-            positionStart: constrainedPositionStart,
-            startTime: constrainedPositionStart,
-        });
-    }, [timelineZoom, onUpdateMedia, MIN_DURATION]);
+    const handleLeftResize = useCallback((clip: MediaFile, target: HTMLElement, newLeftPx: number) => {
+        if (!isSnappingEnabled) {
+            const constrainedLeftPx = Math.max(0, newLeftPx);
+            const newWidth = (clip.positionEnd * timelineZoom) - constrainedLeftPx;
+            target.style.left = `${constrainedLeftPx}px`;
+            target.style.width = `${newWidth}px`;
+            return;
+        }
+        const snapPoints = getSnapPoints(clip.id);
+        const snappedLeftPx = getSnapPosition(newLeftPx, snapPoints.map(p => p * timelineZoom));
+
+        const constrainedLeftPx = Math.max(0, snappedLeftPx);
+        const newWidth = (clip.positionEnd * timelineZoom) - constrainedLeftPx;
+
+        target.style.left = `${constrainedLeftPx}px`;
+        target.style.width = `${newWidth}px`;
+    }, [timelineZoom, getSnapPoints, getSnapPosition, isSnappingEnabled]);
 
     useEffect(() => {
         for (const clip of mediaFiles) {
             moveableRef.current[clip.id]?.updateRect();
         }
-    }, [timelineZoom]);
+    }, [timelineZoom, mediaFiles]);
 
     return (
         <div >
@@ -127,16 +164,15 @@ export default function ImageTimeline() {
                                     targetRefs.current[clip.id] = el;
                                 }
                             }}
-                            onClick={() => handleClick('media', clip.id)}
-                            className={`absolute border border-gray-500 border-opacity-50 rounded-md top-2 h-12 rounded bg-[#27272A] text-white text-sm flex items-center justify-center cursor-pointer ${activeElement === 'media' && mediaFiles[activeElementIndex].id === clip.id ? 'bg-[#3F3F46] border-blue-500' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); handleClick('media', clip.id); }}
+                            className={`absolute border border-gray-500 border-opacity-50 rounded-md top-2 h-12 rounded bg-[#27272A] text-white text-sm flex items-center justify-center cursor-pointer ${activeElement === 'media' && mediaFiles[activeElementIndex]?.id === clip.id ? 'bg-[#3F3F46] border-blue-500' : ''}`}
                             style={{
                                 left: `${clip.positionStart * timelineZoom}px`,
                                 width: `${(clip.positionEnd - clip.positionStart) * timelineZoom}px`,
                                 zIndex: clip.zIndex,
-                                transition: 'none', // Remove CSS transition to prevent conflicts
+                                transition: 'none',
                             }}
                         >
-                            {/* <MoveableTimeline /> */}
                             <Image
                                 alt="Image"
                                 className="h-7 w-7 min-w-6 mr-2 flex-shrink-0"
@@ -156,25 +192,20 @@ export default function ImageTimeline() {
                             }}
                             target={targetRefs.current[clip.id] || null}
                             container={null}
-                            renderDirections={activeElement === 'media' && mediaFiles[activeElementIndex].id === clip.id ? ['w', 'e'] : []}
+                            renderDirections={activeElement === 'media' && mediaFiles[activeElementIndex]?.id === clip.id ? ['w', 'e'] : []}
                             draggable={true}
                             throttleDrag={0}
                             rotatable={false}
                             onDragStart={({ target, clientX, clientY }) => {
+                                handleClick('media', clip.id);
                             }}
                             onDrag={({
                                 target,
-                                beforeDelta, beforeDist,
                                 left,
-                                right,
-                                delta, dist,
-                                transform,
-                            }: OnDrag) => {
-                                handleClick('media', clip.id)
-                                handleDrag(clip, target as HTMLElement, left);
+                            }) => {
+                                handleDrag(target as HTMLElement, left);
                             }}
                             onDragEnd={({ target, isDrag, clientX, clientY }) => {
-                                // Final position update
                                 const currentLeft = parseFloat((target as HTMLElement).style.left) || 0;
                                 const newPositionStart = currentLeft / timelineZoom;
                                 const duration = clip.positionEnd - clip.positionStart;
@@ -185,39 +216,34 @@ export default function ImageTimeline() {
                                 });
                             }}
 
-                            /* resizable*/
                             resizable={true}
                             throttleResize={0}
                             onResizeStart={({ target, clientX, clientY }) => {
+                                handleClick('media', clip.id);
                             }}
                             onResize={({
-                                target, width, height,
+                                target, width,
                                 delta, direction, drag
-                            }: OnResize) => {
-                                handleClick('media', clip.id);
+                            }) => {
 
-                                if (direction[0] === 1) {
-                                    // Right resize
+                                if (direction[0] === 1) { // Right resize
                                     handleRightResize(clip, target as HTMLElement, width);
                                 }
-                                else if (direction[0] === -1) {
-                                    // Left resize
-                                    handleLeftResize(clip, target as HTMLElement, width, drag.delta);
+                                else if (direction[0] === -1) { // Left resize
+                                    const newLeftPx = (drag.target.style.left ? parseFloat(drag.target.style.left) : 0) + drag.delta[0];
+                                    handleLeftResize(clip, target as HTMLElement, newLeftPx);
                                 }
                             }}
                             onResizeEnd={({ target, isDrag, clientX, clientY }) => {
-                                // Final position update after resize
                                 const currentLeft = parseFloat((target as HTMLElement).style.left) || 0;
                                 const currentWidth = parseFloat((target as HTMLElement).style.width) || 0;
                                 const newPositionStart = currentLeft / timelineZoom;
                                 const newDuration = currentWidth / timelineZoom;
                                 const newPositionEnd = newPositionStart + newDuration;
                                 
-                                // Ensure minimum duration
                                 const constrainedPositionStart = Math.max(0, newPositionStart);
                                 const constrainedPositionEnd = Math.max(constrainedPositionStart + MIN_DURATION, newPositionEnd);
 
-                                // For images, simple duration adjustment
                                 finalUpdateMedia(clip.id, {
                                     positionStart: constrainedPositionStart,
                                     positionEnd: constrainedPositionEnd,
@@ -225,7 +251,7 @@ export default function ImageTimeline() {
                                     endTime: constrainedPositionEnd,
                                 });
                             }}
-                            className={activeElement === 'media' && mediaFiles[activeElementIndex].id === clip.id ? '' : 'moveable-control-box-hidden'}
+                            className={activeElement === 'media' && mediaFiles[activeElementIndex]?.id === clip.id ? '' : 'moveable-control-box-hidden'}
 
                         />
                     </div>
