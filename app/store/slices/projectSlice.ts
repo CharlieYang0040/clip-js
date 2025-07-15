@@ -148,7 +148,6 @@ const projectStateSlice = createSlice({
             addToHistory(state);
             state.mediaFiles = action.payload;
             state.duration = calculateTotalDuration(state.mediaFiles, state.textElements);
-            state.activeElements = [];
         },
         updateMediaFiles_INTERNAL: (state, action: PayloadAction<MediaFile[]>) => {
             state.mediaFiles = action.payload;
@@ -171,7 +170,6 @@ const projectStateSlice = createSlice({
             addToHistory(state);
             state.textElements = action.payload;
             state.duration = calculateTotalDuration(state.mediaFiles, state.textElements);
-            state.activeElements = [];
         },
         updateTextElements_INTERNAL: (state, action: PayloadAction<TextElement[]>) => {
             state.textElements = action.payload;
@@ -200,12 +198,14 @@ const projectStateSlice = createSlice({
                     state.activeElements.push(element);
                 }
             } else {
-                if (isSelected && state.activeElements.length === 1) {
-                    state.activeElements = [];
-                } else {
+                if (!isSelected || state.activeElements.length > 1) {
                     state.activeElements = [element];
                 }
             }
+            state.activeGap = null;
+        },
+        setActiveElement: (state, action: PayloadAction<SelectedElement[]>) => {
+            state.activeElements = action.payload;
             state.activeGap = null;
         },
         resetActiveElements: (state) => {
@@ -266,6 +266,7 @@ export const {
     setIsMuted,
     setActiveSection,
     toggleActiveElement,
+    setActiveElement,
     resetActiveElements,
     setActiveGap,
     setFilesID,

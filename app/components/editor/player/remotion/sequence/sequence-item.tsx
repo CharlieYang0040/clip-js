@@ -60,10 +60,10 @@ export const SequenceItem: Record<
                     className={`designcombo-scene-item id-${item.id} designcombo-scene-item-type-${item.type}`}
                     style={{
                         pointerEvents: "auto",
-                        top: item.y,
-                        left: item.x,
-                        width: item.width || "100%",
-                        height: item.height || "auto",
+                        top: item.y ?? 0,
+                        left: item.x ?? 0,
+                        width: "100%",
+                        height: "100%",
                         transform: "none",
                         zIndex: item.zIndex,
                         opacity:
@@ -74,31 +74,20 @@ export const SequenceItem: Record<
                         overflow: "hidden",
                     }}
                 >
-                    <div
+                    <OffthreadVideo
+                        startFrom={(trim.from) * fps}
+                        endAt={(trim.to) * fps + REMOTION_SAFE_FRAME}
+                        playbackRate={playbackRate}
+                        src={item.src || ""}
+                        volume={item.volume !== undefined ? item.volume / 100 : 1}
                         style={{
-                            width: item.width || "100%",
-                            height: item.height || "auto",
-                            position: "relative",
-                            overflow: "hidden",
                             pointerEvents: "none",
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain',
+                            position: "absolute"
                         }}
-                    >
-                        <OffthreadVideo
-                            startFrom={(trim.from) * fps}
-                            endAt={(trim.to) * fps + REMOTION_SAFE_FRAME}
-                            playbackRate={playbackRate}
-                            src={item.src || ""}
-                            volume={item.volume / 100 || 100}
-                            style={{
-                                pointerEvents: "none",
-                                top: 0,
-                                left: 0,
-                                width: item.width || "100%", // Default width
-                                height: item.height || "auto", // Default height
-                                position: "absolute"
-                            }}
-                        />
-                    </div>
+                    />
                 </AbsoluteFill>
             </Sequence>
         );
@@ -186,8 +175,8 @@ export const SequenceItem: Record<
                         pointerEvents: "auto",
                         top: item.y,
                         left: item.x,
-                        width: crop.width || "100%",
-                        height: crop.height || "auto",
+                        width: "100%",
+                        height: "100%",
                         // transform: item?.transform || "none",
                         opacity:
                             item?.opacity !== undefined
@@ -196,29 +185,18 @@ export const SequenceItem: Record<
                         overflow: "hidden",
                     }}
                 >
-                    <div
+                    <Img
                         style={{
-                            width: item.width || "100%",
-                            height: item.height || "auto",
-                            position: "relative",
-                            overflow: "hidden",
                             pointerEvents: "none",
+                            width: "100%",
+                            height: "100%",
+                            objectFit: 'contain',
+                            position: "absolute",
+                            zIndex: item.zIndex || 0,
                         }}
-                    >
-                        <Img
-                            style={{
-                                pointerEvents: "none",
-                                top: -crop.y || 0,
-                                left: -crop.x || 0,
-                                width: item.width || "100%",
-                                height: item.height || "auto",
-                                position: "absolute",
-                                zIndex: item.zIndex || 0,
-                            }}
-                            data-id={item.id}
-                            src={item.src || ""}
-                        />
-                    </div>
+                        data-id={item.id}
+                        src={item.src || ""}
+                    />
                 </AbsoluteFill>
             </Sequence>
         );
@@ -228,8 +206,8 @@ export const SequenceItem: Record<
         const playbackRate = item.playbackSpeed || 1;
         const { from, durationInFrames } = calculateFrames(
             {
-                from: item.positionStart / playbackRate,
-                to: item.positionEnd / playbackRate
+                from: item.positionStart,
+                to: item.positionEnd
             },
             fps
         );
@@ -254,7 +232,7 @@ export const SequenceItem: Record<
                         endAt={(trim.to) * fps + REMOTION_SAFE_FRAME}
                         playbackRate={playbackRate}
                         src={item.src || ""}
-                        volume={item.volume / 100 || 100}
+                        volume={item.volume !== undefined ? item.volume / 100 : 1}
                     />
                 </AbsoluteFill>
             </Sequence>

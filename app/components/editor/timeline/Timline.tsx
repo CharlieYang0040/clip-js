@@ -516,7 +516,11 @@ export const Timeline = () => {
                 className="relative overflow-x-auto w-full border-t border-gray-800 bg-[#1E1D21] z-10"
                 ref={timelineRef}
             >
-                <div onMouseDown={handleDragStart} onClick={handleTimelineClick}>
+                <div onMouseDown={handleDragStart} onClick={(e) => {
+                    if (e.target === e.currentTarget) {
+                        handleTimelineClick(e);
+                    }
+                }}>
                     <Header />
                 </div>
 

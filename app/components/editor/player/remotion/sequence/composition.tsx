@@ -55,8 +55,8 @@ const Composition = () => {
     return (
         <>
             {mediaFiles
+                .filter((item: MediaFile) => item && item.src)
                 .map((item: MediaFile) => {
-                    if (!item) return;
                     const trackItem = {
                         ...item,
                     } as MediaFile;

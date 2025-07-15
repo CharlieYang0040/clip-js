@@ -110,7 +110,7 @@ export default function MediaList() {
     }, [processFiles]);
 
     const onDeleteMedia = async (id: string) => {
-        const onUpdateMedia = mediaFiles.filter(f => f.fileId !== id);
+        const onUpdateMedia = mediaFiles.filter(f => f.url !== id);
         dispatch(setMediaFiles(onUpdateMedia));
         dispatch(setFilesID(filesID?.filter(f => f !== id) || []));
         await deleteFile(id);

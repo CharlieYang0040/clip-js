@@ -23,33 +23,76 @@ export default function AddMedia({ fileId }: { fileId: string }) {
                 ? Math.max(...relevantClips.map(f => f.positionEnd))
                 : 0;
 
-            let duration = 30; // Default for images
+            let duration = 5; // Default for images
+            let width = 1920; // Default width, fallback
+            let height = 1080; // Default height, fallback
+            
             const mediaType = categorizeFile(file.type);
-            if (mediaType === 'video' || mediaType === 'audio') {
-                duration = await getMediaDuration(file);
+            if (mediaType === 'unknown') {
+                toast.error(`Unsupported file type for: ${file.name}`);
+                return;
+            }
+
+            const objectUrl = URL.createObjectURL(file);
+
+            try {
+                if (mediaType === 'video') {
+                    const video = await new Promise<HTMLVideoElement>((resolve, reject) => {
+                        const videoElement = document.createElement('video');
+                        videoElement.onloadedmetadata = () => resolve(videoElement);
+                        videoElement.onerror = (e) => reject(`Could not read metadata from ${file.name}`);
+                        videoElement.src = objectUrl;
+                    });
+                    duration = video.duration;
+                    width = video.videoWidth;
+                    height = video.videoHeight;
+                } else if (mediaType === 'audio') {
+                    const audio = await new Promise<HTMLAudioElement>((resolve, reject) => {
+                        const audioElement = document.createElement('audio');
+                        audioElement.onloadedmetadata = () => resolve(audioElement);
+                        audioElement.onerror = (e) => reject(`Could not read metadata from ${file.name}`);
+                        audioElement.src = objectUrl;
+                    });
+                    duration = audio.duration;
+                    // Audio has no visual dimensions, but we might set defaults if needed
+                    width = 0; 
+                    height = 0;
+                } else if (mediaType === 'image') {
+                    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+                        const imgElement = new window.Image();
+                        imgElement.onload = () => resolve(imgElement);
+                        imgElement.onerror = (e) => reject(`Could not read dimensions from ${file.name}`);
+                        imgElement.src = objectUrl;
+                    });
+                    width = img.naturalWidth;
+                    height = img.naturalHeight;
+                    // Default duration for images is already 5s
+                }
+            } catch (error) {
+                toast.error(String(error));
+                console.error("Error processing media:", error);
+                URL.revokeObjectURL(objectUrl); // Clean up
+                return;
             }
 
             updatedMedia.push({
                 id: mediaId,
                 fileName: file.name,
-                fileId: fileId,
-                startTime: 0,
-                endTime: duration,
-                src: URL.createObjectURL(file),
+                url: fileId,
+                src: objectUrl,
+                type: mediaType,
                 positionStart: lastEnd,
                 positionEnd: lastEnd + duration,
-                includeInMerge: true,
+                startTime: 0,
+                endTime: duration,
+                sourceDuration: duration,
+                zIndex: 0,
+                width: width,
+                height: height,
                 x: 0,
                 y: 0,
-                width: 1920,
-                height: 1080,
-                rotation: 0,
                 opacity: 100,
-                crop: { x: 0, y: 0, width: 1920, height: 1080 },
-                playbackSpeed: 1,
-                volume: 100,
-                type: categorizeFile(file.type),
-                zIndex: 0,
+                volume: mediaType === 'audio' || mediaType === 'video' ? 100 : 0,
             });
         }
         dispatch(setMediaFiles(updatedMedia));

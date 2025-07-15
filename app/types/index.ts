@@ -9,29 +9,29 @@ export interface UploadedFile {
 
 export interface MediaFile {
     id: string;
+    url?: string;
     fileName: string;
-    fileId: string;
-    type: MediaType;
-    startTime: number;  // within the source video
-    src?: string;
-    endTime: number;
-    positionStart: number;  // position in the final video
+    type: 'video' | 'audio' | 'image';
+    positionStart: number;
     positionEnd: number;
-    includeInMerge: boolean;
-    playbackSpeed: number;
-    volume: number;
+    startTime: number;
+    endTime: number;
+    sourceDuration: number;
     zIndex: number;
-
-    // Optional visual settings
-    x?: number;
-    y?: number;
     width?: number;
     height?: number;
-    rotation?: number;
     opacity?: number;
-
-    // Effects
-    crop?: { x: number; y: number; width: number; height: number };
+    x?: number;
+    y?: number;
+    volume?: number;
+    src?: string;
+    playbackSpeed?: number;
+    crop?: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    };
 }
 
 export interface TextElement {

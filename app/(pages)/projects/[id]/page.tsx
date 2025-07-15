@@ -62,11 +62,11 @@ export default function Project({ params }: { params: { id: string } }) {
                 if (project) {
                     const validMediaFiles = (await Promise.all(
                         project.mediaFiles.map(async (media: MediaFile) => {
-                            const file = await getFile(media.fileId);
+                            const file = await getFile(media.url!);
                             if (file) {
                                 return { ...media, src: URL.createObjectURL(file) };
                             }
-                            console.warn(`File not found in IndexedDB for fileId: ${media.fileId}`);
+                            console.warn(`File not found in IndexedDB for fileId: ${media.url!}`);
                             return null;
                         })
                     )).filter(Boolean) as MediaFile[];
@@ -82,12 +82,22 @@ export default function Project({ params }: { params: { id: string } }) {
     // save
     useEffect(() => {
         const saveProject = async () => {
-            if (!projectState || projectState.id != currentProjectId) return;
-            await storeProject(projectState);
-            dispatch(updateProject(projectState));
+            if (!projectState || projectState.id !== currentProjectId) return;
+
+            // Create a serializable state for IndexedDB
+            const stateToSave = {
+                ...projectState,
+                mediaFiles: projectState.mediaFiles.map(media => {
+                    const { src, ...rest } = media as MediaFile & { src?: string };
+                    return rest;
+                }),
+            };
+
+            await storeProject(stateToSave);
+            dispatch(updateProject(projectState)); // Still dispatch the full state to redux
         };
         saveProject();
-    }, [projectState, dispatch]);
+    }, [projectState, dispatch, currentProjectId]);
 
     const handleFocus = (section: "media" | "text" | "export") => {
         dispatch(setActiveSection(section));
