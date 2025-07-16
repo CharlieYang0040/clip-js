@@ -36,6 +36,7 @@ export interface MediaFile {
 
 export interface TextElement {
     id: string;
+    type: 'text';
     text: string;                     // The actual text content
     includeInMerge?: boolean;
 

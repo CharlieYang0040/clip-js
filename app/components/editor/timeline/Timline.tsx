@@ -263,6 +263,9 @@ export const Timeline = () => {
     };
 
     const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (e.target !== e.currentTarget) {
+            return;
+        }
         if (wasDragging.current) {
             return;
         }

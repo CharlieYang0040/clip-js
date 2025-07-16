@@ -27,8 +27,6 @@ const Tooltip = ({ info }: { info: { visible: boolean; content: string; x: numbe
 
 const AudioClipItem = memo(({
     clip,
-    finalUpdateMedia,
-    mediaFilesRef,
     timelineZoom,
     isSnappingEnabled,
     verticalGuidelines,
@@ -36,8 +34,6 @@ const AudioClipItem = memo(({
     activeElementsLength
 }: {
     clip: MediaFile;
-    finalUpdateMedia: (updates: { id: string, data: Partial<MediaFile> }[]) => void;
-    mediaFilesRef: React.RefObject<MediaFile[]>;
     timelineZoom: number;
     isSnappingEnabled: boolean;
     verticalGuidelines: number[];
@@ -47,11 +43,9 @@ const AudioClipItem = memo(({
     const targetRef = useRef<HTMLDivElement | null>(null);
     const moveableRef = useRef<Moveable | null>(null);
 
-    const { onClick, ...moveableProps } = useTimelineElement({
+    const moveableProps = useTimelineElement({
         clip,
-        elementsRef: mediaFilesRef,
         elementType: 'media',
-        updateFunction: finalUpdateMedia,
     });
     
     const { resizeInfo, isAtLimit } = moveableProps;
@@ -84,7 +78,6 @@ const AudioClipItem = memo(({
             <div
                 data-element-id={clip.id}
                 ref={targetRef}
-                onClick={onClick}
                 className={`absolute border border-gray-500 border-opacity-50 rounded-md top-2 h-12 rounded bg-[#27272A] text-white text-sm flex items-center justify-center cursor-pointer ${isSelected(clip.id) ? 'bg-[#3F3F46] border-blue-500' : ''}`}
                 style={{
                     left: `${clip.positionStart * timelineZoom}px`,
@@ -130,11 +123,6 @@ export default function AudioTimeline() {
     const dispatch = useDispatch();
     const moveableRef = useRef<Record<string, Moveable | null>>({});
 
-    const mediaFilesRef = useRef(mediaFiles);
-    useEffect(() => {
-        mediaFilesRef.current = mediaFiles;
-    }, [mediaFiles]);
-
     const audioClips = useMemo(() =>
         mediaFiles.filter(clip => clip.type === 'audio').sort((a, b) => a.positionStart - b.positionStart),
         [mediaFiles]
@@ -178,17 +166,6 @@ export default function AudioTimeline() {
         return Array.from(new Set(points));
     }, [isSnappingEnabled, currentTime, timelineZoom, mediaFiles, textElements, activeElements, duration, tickInterval]);
 
-    const finalUpdateMedia = useMemo(() =>
-        debounce((updates: { id: string, data: Partial<MediaFile> }[]) => {
-            const currentFiles = mediaFilesRef.current;
-            const updatedFiles = currentFiles.map(media => {
-                const update = updates.find(u => u.id === media.id);
-                return update ? { ...media, ...update.data } : media;
-            });
-            dispatch(setMediaFiles(updatedFiles));
-        }, 50), [dispatch]
-    );
-
     const handleGapClick = (gap: { start: number, end: number }, e: React.MouseEvent) => {
         e.stopPropagation();
         dispatch(resetActiveElements());
@@ -222,8 +199,6 @@ export default function AudioTimeline() {
                 <AudioClipItem
                     key={clip.id}
                     clip={clip}
-                    finalUpdateMedia={finalUpdateMedia}
-                    mediaFilesRef={mediaFilesRef}
                     timelineZoom={timelineZoom}
                     isSnappingEnabled={isSnappingEnabled}
                     verticalGuidelines={verticalGuidelines}

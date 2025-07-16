@@ -27,8 +27,6 @@ const Tooltip = ({ info }: { info: { visible: boolean; content: string; x: numbe
 
 const TextClipItem = memo(({
     clip,
-    finalUpdateText,
-    textElementsRef,
     timelineZoom,
     isSnappingEnabled,
     verticalGuidelines,
@@ -36,8 +34,6 @@ const TextClipItem = memo(({
     activeElementsLength
 }: {
     clip: TextElement;
-    finalUpdateText: (updates: { id: string, data: Partial<TextElement> }[]) => void;
-    textElementsRef: React.RefObject<TextElement[]>;
     timelineZoom: number;
     isSnappingEnabled: boolean;
     verticalGuidelines: number[];
@@ -47,11 +43,9 @@ const TextClipItem = memo(({
     const targetRef = useRef<HTMLDivElement | null>(null);
     const moveableRef = useRef<Moveable | null>(null);
 
-    const { onClick, ...moveableProps } = useTimelineElement({
+    const moveableProps = useTimelineElement({
         clip,
-        elementsRef: textElementsRef,
         elementType: 'text',
-        updateFunction: finalUpdateText,
     });
     
     const { resizeInfo, isAtLimit } = moveableProps;
@@ -84,7 +78,6 @@ const TextClipItem = memo(({
             <div
                 data-element-id={clip.id}
                 ref={targetRef}
-                onClick={onClick}
                 className={`absolute border border-gray-500 border-opacity-50 rounded-md top-2 h-12 rounded bg-[#27272A] text-white text-sm flex items-center justify-center cursor-pointer ${isSelected(clip.id) ? 'bg-[#3F3F46] border-blue-500' : ''}`}
                 style={{
                     left: `${clip.positionStart * timelineZoom}px`,
@@ -129,11 +122,6 @@ export default function TextTimeline() {
     const dispatch = useDispatch();
     const moveableRef = useRef<Record<string, Moveable | null>>({});
 
-    const textElementsRef = useRef(textElements);
-    useEffect(() => {
-        textElementsRef.current = textElements;
-    }, [textElements]);
-
     const sortedTextElements = useMemo(() =>
         [...textElements].sort((a, b) => a.positionStart - b.positionStart),
         [textElements]
@@ -175,17 +163,6 @@ export default function TextTimeline() {
         return Array.from(new Set(points));
     }, [isSnappingEnabled, currentTime, timelineZoom, mediaFiles, textElements, activeElements, duration, tickInterval]);
 
-    const finalUpdateText = useMemo(() =>
-        debounce((updates: { id: string, data: Partial<TextElement> }[]) => {
-            const currentElements = textElementsRef.current;
-            const updatedElements = currentElements.map(element => {
-                const update = updates.find(u => u.id === element.id);
-                return update ? { ...element, ...update.data } : element;
-            });
-            dispatch(setTextElements(updatedElements));
-        }, 50), [dispatch]
-    );
-
     const handleGapClick = (gap: { start: number, end: number }, e: React.MouseEvent) => {
         e.stopPropagation();
         dispatch(resetActiveElements());
@@ -219,8 +196,6 @@ export default function TextTimeline() {
                 <TextClipItem
                     key={clip.id}
                     clip={clip}
-                    finalUpdateText={finalUpdateText}
-                    textElementsRef={textElementsRef}
                     timelineZoom={timelineZoom}
                     isSnappingEnabled={isSnappingEnabled}
                     verticalGuidelines={verticalGuidelines}
