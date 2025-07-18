@@ -174,12 +174,13 @@ export function useTimelineElement<T extends ElementType>({
 
             if (isMedia) {
                 const mediaClip = originalClip as MediaFile;
-                const maxTimelineWidth = mediaClip.sourceDuration * timelineZoom;
-
+                // Maximum width is current width + available media at the start
+                const maxTimelineWidth = startWidth + (mediaClip.startTime * timelineZoom);
+                
                 if (newWidth >= maxTimelineWidth) {
                     currentIsAtLimit = 'left';
                     newWidth = maxTimelineWidth;
-                    newLeft = (originalClip.positionEnd * timelineZoom) - maxTimelineWidth;
+                    newLeft = startLeft + startWidth - newWidth;
                 }
             }
             if (newLeft < 0) {
@@ -193,7 +194,9 @@ export function useTimelineElement<T extends ElementType>({
 
             if (isMedia) {
                 const mediaClip = originalClip as MediaFile;
-                const maxTimelineWidth = mediaClip.sourceDuration * timelineZoom;
+                // Maximum width is current width + available media at the end
+                const maxTimelineWidth = startWidth + (mediaClip.sourceDuration - mediaClip.endTime) * timelineZoom;
+
                 if (newWidth >= maxTimelineWidth) {
                     currentIsAtLimit = 'right';
                     newWidth = maxTimelineWidth;
@@ -262,12 +265,12 @@ export function useTimelineElement<T extends ElementType>({
                 };
             }
 
-            if (originalClip.type !== 'text') {
+            if (elementType === 'media') {
                 const updatedMediaFiles = mediaFiles.map(file =>
                     file.id === clip.id ? { ...file, ...updateData as Partial<MediaFile> } : file
                 );
                 dispatch(setMediaFiles(updatedMediaFiles));
-            } else {
+            } else if (elementType === 'text') {
                 const updatedTextElements = textElements.map(element =>
                     element.id === clip.id ? { ...element, ...updateData as Partial<TextElement> } : element
                 );
