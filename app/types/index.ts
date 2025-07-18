@@ -1,4 +1,13 @@
 export type MediaType = 'video' | 'audio' | 'image' | 'unknown';
+export type TrackType = 'video' | 'audio' | 'image' | 'text';
+
+export interface Track {
+    id: string;
+    type: TrackType;
+    name: string; // e.g., "Video 1", "Audio 2"
+    visible: boolean;
+    locked: boolean;
+}
 
 export interface UploadedFile {
     id: string;
@@ -12,6 +21,7 @@ export interface MediaFile {
     url?: string;
     fileName: string;
     type: 'video' | 'audio' | 'image';
+    trackId: string;
     positionStart: number;
     positionEnd: number;
     startTime: number;
@@ -38,6 +48,7 @@ export interface TextElement {
     id: string;
     type: 'text';
     text: string;                     // The actual text content
+    trackId: string;
     includeInMerge?: boolean;
 
     // Timing
@@ -90,6 +101,7 @@ export interface SelectedElement {
 
 export interface ProjectState {
     id: string;
+    tracks: Track[];
     mediaFiles: MediaFile[];
     textElements: TextElement[];
     filesID?: string[],
@@ -103,7 +115,7 @@ export interface ProjectState {
     isSnappingEnabled: boolean;
     activeSection: ActiveElement;
     activeElements: SelectedElement[];
-    activeGap: { start: number, end: number, trackType: 'video' | 'audio' | 'image' | 'text' } | null;
+    activeGap: { start: number, end: number, trackId: string, trackType: TrackType } | null;
     projectName: string;
     createdAt: string;
     lastModified: string;
@@ -113,6 +125,8 @@ export interface ProjectState {
     history: ProjectState[]; // stack for undo
     future: ProjectState[]; // stack for redo
     exportSettings: ExportConfig;
+    draggingElement: { clip: MediaFile | TextElement, elementType: 'media' | 'text' } | null;
+    dragOverTrackId: string | null;
 }
 
 export const mimeToExt = {

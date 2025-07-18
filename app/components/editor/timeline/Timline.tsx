@@ -1,5 +1,5 @@
 import { useAppSelector } from "@/app/store";
-import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setSnapMode, setActiveGap, toggleActiveElement, resetActiveElements } from "@/app/store/slices/projectSlice";
+import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setSnapMode, setActiveGap, toggleActiveElement, resetActiveElements, addTrack, removeTrack } from "@/app/store/slices/projectSlice";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
@@ -11,10 +11,17 @@ import TextTimeline from "./elements-timeline/TextTimeline";
 import { throttle } from 'lodash';
 import GlobalKeyHandlerProps from "../../../components/editor/keys/GlobalKeyHandlerProps";
 import toast from "react-hot-toast";
-import { MediaFile, TextElement } from "@/app/types";
+import { MediaFile, TextElement, Track, TrackType } from "@/app/types";
+
+const trackTypeIcons = {
+    video: { src: "https://www.svgrepo.com/show/532727/video.svg", alt: "Video" },
+    audio: { src: "https://www.svgrepo.com/show/532708/music.svg", alt: "Audio" },
+    image: { src: "https://www.svgrepo.com/show/535454/image.svg", alt: "Image" },
+    text: { src: "https://www.svgrepo.com/show/535686/text.svg", alt: "Text" },
+};
 
 export const Timeline = () => {
-    const { currentTime, timelineZoom, enableMarkerTracking, activeElements, mediaFiles, textElements, duration, isPlaying, isSnappingEnabled, activeGap } = useAppSelector((state) => state.projectState);
+    const { currentTime, timelineZoom, enableMarkerTracking, activeElements, mediaFiles, textElements, duration, isPlaying, isSnappingEnabled, activeGap, tracks, draggingElement, dragOverTrackId } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const timelineRef = useRef<HTMLDivElement>(null);
     const wasDragging = useRef(false);
@@ -343,6 +350,11 @@ export const Timeline = () => {
         }
     }, [isDraggingMarker, handleDragMove, handleDragEnd]);
 
+    const handleAddTrack = (type: TrackType) => {
+        dispatch(addTrack(type));
+        toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} track added.`);
+    }
+
     return (
         <div className="flex w-full flex-col gap-2">
             <div className="flex flex-row items-center justify-between gap-12 w-full">
@@ -515,46 +527,111 @@ export const Timeline = () => {
                 </div>
             </div>
 
-            <div
-                className="relative overflow-x-auto w-full border-t border-gray-800 bg-[#1E1D21] z-10"
-                ref={timelineRef}
-            >
-                <div onMouseDown={handleDragStart} onClick={(e) => {
-                    if (e.target === e.currentTarget) {
-                        handleTimelineClick(e);
-                    }
-                }}>
-                    <Header />
+            <div className="flex flex-row items-center gap-2 mb-2">
+                <button onClick={() => handleAddTrack('video')} className="bg-gray-700 text-white px-2 py-1 text-xs rounded">Add Video Track</button>
+                <button onClick={() => handleAddTrack('audio')} className="bg-gray-700 text-white px-2 py-1 text-xs rounded">Add Audio Track</button>
+                <button onClick={() => handleAddTrack('image')} className="bg-gray-700 text-white px-2 py-1 text-xs rounded">Add Image Track</button>
+                <button onClick={() => handleAddTrack('text')} className="bg-gray-700 text-white px-2 py-1 text-xs rounded">Add Text Track</button>
+            </div>
+
+            <div className="flex w-full">
+                {/* Fixed Left Panel for Track Headers */}
+                <div className="w-36 flex-shrink-0 bg-[#28272C] z-20">
+                    <div className="h-10 border-b border-gray-800">
+                        {/* This space aligns with the timeline Header */}
+                    </div>
+                    {tracks.map((track: Track) => {
+                        const icon = trackTypeIcons[track.type];
+                        return (
+                            <div key={track.id} className="h-20 flex flex-col items-center justify-center p-2 border-b border-gray-700">
+                                {icon && (
+                                    <Image
+                                        src={icon.src}
+                                        alt={icon.alt}
+                                        width={24}
+                                        height={24}
+                                        className="mb-1 invert"
+                                    />
+                                )}
+                                <span className="text-white text-sm font-semibold truncate">{track.name}</span>
+                                <button 
+                                    onClick={() => dispatch(removeTrack(track.id))}
+                                    className="text-red-500 hover:text-red-400 text-xs mt-1"
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        )
+                    })}
                 </div>
 
-                <div className="bg-[#1E1D21]" style={{ width: "100%" }}>
-                    <div
-                        className={`absolute top-0 bottom-0 w-[2px] z-50 cursor-ew-resize bg-red-500`}
-                        style={{
-                            left: `${localCurrentTime * timelineZoom}px`,
+                {/* Scrollable Right Panel for Timeline Content */}
+                <div
+                    className="relative overflow-x-auto w-full bg-[#1E1D21] z-10"
+                    ref={timelineRef}
+                >
+                    <div 
+                        onMouseDown={handleDragStart} 
+                        onClick={(e) => {
+                            if (e.target === e.currentTarget) {
+                                handleTimelineClick(e);
+                            }
                         }}
-                        onMouseDown={handleDragStart}
+                        className="h-10 border-b border-gray-800"
                     >
-                        <div className={`absolute -top-8 -left-8 text-white text-xs px-2 py-1 rounded whitespace-nowrap border bg-red-500 border-red-400 transition-all duration-300`}>
-                            {(localCurrentTime).toFixed(2)}s
-                        </div>
+                        <Header />
                     </div>
-                    
-                    <div className="w-full">
-                        <div className="relative h-16 z-10">
-                            <VideoTimeline />
-                        </div>
 
-                        <div className="relative h-16 z-10">
-                            <AudioTimeline />
+                    <div className="bg-[#1E1D21]" style={{ width: "100%" }}>
+                        <div
+                            className={`absolute top-0 bottom-0 w-[2px] z-50 cursor-ew-resize bg-red-500`}
+                            style={{
+                                left: `${localCurrentTime * timelineZoom}px`,
+                            }}
+                            onMouseDown={handleDragStart}
+                        >
+                            <div className={`absolute -top-8 -left-8 text-white text-xs px-2 py-1 rounded whitespace-nowrap border bg-red-500 border-red-400 transition-all duration-300`}>
+                                {(localCurrentTime).toFixed(2)}s
+                            </div>
                         </div>
+                        
+                        <div className="w-full h-full relative">
+                            {tracks.map((track: Track) => {
+                                const component = (() => {
+                                    switch (track.type) {
+                                        case 'video':
+                                            return <VideoTimeline trackId={track.id} />;
+                                        case 'audio':
+                                            return <AudioTimeline trackId={track.id} />;
+                                        case 'image':
+                                            return <ImageTimeline trackId={track.id} />;
+                                        case 'text':
+                                            return <TextTimeline trackId={track.id} />;
+                                        default:
+                                            return null;
+                                    }
+                                })();
 
-                        <div className="relative h-16 z-10">
-                            <ImageTimeline />
-                        </div>
+                                const isOver = dragOverTrackId === track.id;
+                                let canDrop = false;
+                                if (draggingElement) {
+                                    const { clip, elementType } = draggingElement;
+                                    const clipType = elementType === 'media' ? (clip as MediaFile).type : 'text';
+                                    canDrop = clipType === track.type;
+                                }
 
-                        <div className="relative h-16 z-10">
-                            <TextTimeline />
+                                return (
+                                    <div 
+                                        key={track.id} 
+                                        data-track-id={track.id}
+                                        className={`relative h-20 border-b border-gray-700 transition-colors duration-200 ${isOver && canDrop ? 'bg-green-500 bg-opacity-20' : ''}`}
+                                    >
+                                        <div className="relative h-full flex-grow flex items-center">
+                                            {component}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>

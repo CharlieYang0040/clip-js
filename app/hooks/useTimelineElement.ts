@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 import { useAppSelector, useAppDispatch } from '@/app/store';
-import { toggleActiveElement, setActiveElement, setMediaFiles, setTextElements } from '@/app/store/slices/projectSlice';
+import { toggleActiveElement, setActiveElement, setMediaFiles, setTextElements, setDraggingElement, setDragOverTrackId } from '@/app/store/slices/projectSlice';
 import { MediaFile, TextElement, SelectedElement } from '@/app/types';
 import { OnDrag, OnDragStart, OnResize, OnResizeStart, OnResizeEnd, OnDragEnd } from 'react-moveable';
 
@@ -18,7 +18,7 @@ export function useTimelineElement<T extends ElementType>({
     elementType,
 }: UseTimelineElementProps<T>) {
     const dispatch = useAppDispatch();
-    const { timelineZoom, activeElements, mediaFiles, textElements } = useAppSelector((state) => state.projectState);
+    const { timelineZoom, activeElements, mediaFiles, textElements, dragOverTrackId, tracks } = useAppSelector((state) => state.projectState);
     const [dragStates, setDragStates] = useState<Record<string, { startX: number; startLeft: number }>>({});
     const [resizeInfo, setResizeInfo] = useState<{
         visible: boolean;
@@ -47,6 +47,7 @@ export function useTimelineElement<T extends ElementType>({
 
     const onDragStart = (e: OnDragStart) => {
         const { clientX, inputEvent } = e;
+        dispatch(setDraggingElement({ clip, elementType }));
         metaKeyPressed.current = inputEvent.ctrlKey || inputEvent.shiftKey;
         const newDragStates: typeof dragStates = {};
         let elementsToDrag: SelectedElement[];
@@ -73,13 +74,25 @@ export function useTimelineElement<T extends ElementType>({
     };
 
     const onDrag = (e: OnDrag) => {
-        const { transform } = e;
+        const { transform, clientY } = e;
         Object.keys(dragStates).forEach(id => {
             const domElement = document.querySelector(`[data-element-id='${id}']`) as HTMLElement;
             if (domElement) {
                 domElement.style.transform = transform;
             }
         });
+        
+        const trackElements = Array.from(document.querySelectorAll('[data-track-id]'));
+        const targetTrack = trackElements.find(el => {
+            const rect = el.getBoundingClientRect();
+            return clientY >= rect.top && clientY <= rect.bottom;
+        });
+
+        if (targetTrack) {
+            dispatch(setDragOverTrackId(targetTrack.getAttribute('data-track-id')));
+        } else {
+            dispatch(setDragOverTrackId(null));
+        }
     };
 
     const onDragEnd = (e: OnDragEnd) => {
@@ -90,65 +103,41 @@ export function useTimelineElement<T extends ElementType>({
                 element: { id: clip.id, type: elementType },
                 metaKey: metaKeyPressed.current
             }));
-            setDragStates({});
-            return;
-        }
+        } else if (dragOverTrackId) {
+            const targetTrack = tracks.find(t => t.id === dragOverTrackId);
+            const clipType = elementType === 'media' ? (clip as MediaFile).type : 'text';
 
-        const mediaUpdates: { id: string; data: Partial<MediaFile> }[] = [];
-        const textUpdates: { id: string; data: Partial<TextElement> }[] = [];
-        const updatedElementsForSelection: SelectedElement[] = [];
+            if (targetTrack && targetTrack.type === clipType) {
+                const domElement = document.querySelector(`[data-element-id='${clip.id}']`) as HTMLElement;
+                if (domElement) {
+                    const transform = new DOMMatrix(getComputedStyle(domElement).transform);
+                    const newLeft = domElement.offsetLeft + transform.m41;
+                    const newPositionStart = newLeft / timelineZoom;
+                    const duration = clip.positionEnd - clip.positionStart;
 
-        const allElements = [...mediaFiles, ...textElements];
-
-        Object.keys(dragStates).forEach(id => {
-            const domElement = document.querySelector(`[data-element-id='${id}']`) as HTMLElement;
-            if (domElement) {
-                const transform = new DOMMatrix(getComputedStyle(domElement).transform);
-                const newLeft = domElement.offsetLeft + transform.m41;
-                domElement.style.transform = 'none';
-
-                const newPositionStart = newLeft / timelineZoom;
-                const originalElement = allElements.find(m => m.id === id);
-
-                if (originalElement) {
-                    const duration = originalElement.positionEnd - originalElement.positionStart;
                     const updateData = {
+                        trackId: dragOverTrackId,
                         positionStart: newPositionStart,
                         positionEnd: newPositionStart + duration,
                     };
 
-                    if (originalElement.type === 'text') {
-                        textUpdates.push({ id, data: updateData });
-                        updatedElementsForSelection.push({ id, type: 'text' });
-                    } else { // 'video', 'audio', 'image'
-                        mediaUpdates.push({ id, data: updateData });
-                        updatedElementsForSelection.push({ id, type: 'media' });
+                    if (elementType === 'media') {
+                        dispatch(setMediaFiles(mediaFiles.map(f => f.id === clip.id ? { ...f, ...updateData } : f)));
+                    } else {
+                        dispatch(setTextElements(textElements.map(t => t.id === clip.id ? { ...t, ...updateData } : t)));
                     }
                 }
             }
+        }
+        
+        // Reset transform and drag states
+        Object.keys(dragStates).forEach(id => {
+            const domElement = document.querySelector(`[data-element-id='${id}']`) as HTMLElement;
+            if (domElement) domElement.style.transform = 'none';
         });
-
-        if (mediaUpdates.length > 0) {
-            const updatedMediaFiles = mediaFiles.map(file => {
-                const update = mediaUpdates.find(u => u.id === file.id);
-                return update ? { ...file, ...update.data } : file;
-            });
-            dispatch(setMediaFiles(updatedMediaFiles));
-        }
-
-        if (textUpdates.length > 0) {
-            const updatedTextElements = textElements.map(element => {
-                const update = textUpdates.find(u => u.id === element.id);
-                return update ? { ...element, ...update.data } : element;
-            });
-            dispatch(setTextElements(updatedTextElements));
-        }
-
-        if (updatedElementsForSelection.length > 0) {
-            dispatch(setActiveElement(updatedElementsForSelection));
-        }
-
         setDragStates({});
+        dispatch(setDraggingElement(null));
+        dispatch(setDragOverTrackId(null));
     };
 
     const onResizeStart = (e: OnResizeStart) => {

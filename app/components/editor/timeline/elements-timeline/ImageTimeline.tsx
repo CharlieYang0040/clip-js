@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useEffect } from "react";
+import React, { useRef, useMemo, useEffect, useState } from "react";
 import ReactDOM from "react-dom";
 import Moveable from "react-moveable";
 import { useAppSelector } from "@/app/store";
@@ -40,7 +40,7 @@ const ImageClipItem = memo(({
     isSelected: (clipId: string) => boolean;
     activeElementsLength: number;
 }) => {
-    const targetRef = useRef<HTMLDivElement | null>(null);
+    const [target, setTarget] = useState<HTMLDivElement | null>(null);
     const moveableRef = useRef<Moveable | null>(null);
 
     const moveableProps = useTimelineElement({
@@ -77,7 +77,7 @@ const ImageClipItem = memo(({
             <Tooltip info={resizeInfo} />
             <div
                 data-element-id={clip.id}
-                ref={targetRef}
+                ref={setTarget}
                 className={`absolute border border-gray-500 border-opacity-50 rounded-md top-2 h-12 rounded bg-[#27272A] text-white text-sm flex items-center justify-center cursor-pointer ${isSelected(clip.id) ? 'bg-[#3F3F46] border-blue-500' : ''}`}
                 style={{
                     left: `${clip.positionStart * timelineZoom}px`,
@@ -97,7 +97,7 @@ const ImageClipItem = memo(({
             </div>
             <Moveable
                 ref={moveableRef}
-                target={targetRef.current}
+                target={target}
                 container={null}
                 renderDirections={isSelected(clip.id) && activeElementsLength === 1 ? ['w', 'e'] : []}
                 draggable={true}
@@ -118,15 +118,15 @@ const ImageClipItem = memo(({
 ImageClipItem.displayName = 'ImageClipItem';
 
 
-export default function ImageTimeline() {
+export default function ImageTimeline({ trackId }: { trackId: string }) {
     const targetRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const { mediaFiles, textElements, activeElements, timelineZoom, isSnappingEnabled, currentTime, activeGap, duration } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const moveableRef = useRef<Record<string, Moveable | null>>({});
 
     const imageClips = useMemo(() =>
-        mediaFiles.filter(clip => clip.type === 'image').sort((a, b) => a.positionStart - b.positionStart),
-        [mediaFiles]
+        mediaFiles.filter(clip => clip.type === 'image' && clip.trackId === trackId).sort((a, b) => a.positionStart - b.positionStart),
+        [mediaFiles, trackId]
     );
 
     const gaps = useMemo(() => {
@@ -170,7 +170,7 @@ export default function ImageTimeline() {
     const handleGapClick = (gap: { start: number, end: number }, e: React.MouseEvent) => {
         e.stopPropagation();
         dispatch(resetActiveElements());
-        dispatch(setActiveGap({ ...gap, trackType: 'image' }));
+        dispatch(setActiveGap({ ...gap, trackId, trackType: 'image' }));
     };
 
     const isSelected = (clipId: string) => activeElements.some(el => el.id === clipId);
@@ -188,7 +188,7 @@ export default function ImageTimeline() {
             {gaps.map((gap, index) => (
                 <div
                     key={`gap-image-${index}`}
-                    className={`absolute top-0 h-full z-0 ${activeGap?.trackType === 'image' && activeGap?.start === gap.start ? 'bg-yellow-500 bg-opacity-30 border-2 border-yellow-500' : 'hover:bg-gray-500 hover:bg-opacity-20'}`}
+                    className={`absolute top-0 h-full z-0 ${activeGap?.trackId === trackId && activeGap?.start === gap.start ? 'bg-yellow-500 bg-opacity-30 border-2 border-yellow-500' : 'hover:bg-gray-500 hover:bg-opacity-20'}`}
                     style={{
                         left: `${gap.start * timelineZoom}px`,
                         width: `${(gap.end - gap.start) * timelineZoom}px`,

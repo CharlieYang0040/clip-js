@@ -1,12 +1,20 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { TextElement, MediaFile, ActiveElement, ExportConfig, SelectedElement } from '../../types';
+import { TextElement, MediaFile, ActiveElement, ExportConfig, SelectedElement, Track, TrackType } from '../../types';
 import { ProjectState } from '../../types';
 
+const createDefaultTracks = (): Track[] => [
+    { id: `track-video-${crypto.randomUUID()}`, type: 'video', name: 'Video 1', visible: true, locked: false },
+    { id: `track-audio-${crypto.randomUUID()}`, type: 'audio', name: 'Audio 1', visible: true, locked: false },
+    { id: `track-image-${crypto.randomUUID()}`, type: 'image', name: 'Image 1', visible: true, locked: false },
+    { id: `track-text-${crypto.randomUUID()}`, type: 'text', name: 'Text 1', visible: true, locked: false },
+];
+
 export const initialState: ProjectState = {
-    id: crypto.randomUUID(),
-    projectName: '',
+    id: '',
+    projectName: 'Untitled Project',
     createdAt: new Date().toISOString(),
     lastModified: new Date().toISOString(),
+    tracks: [],
     mediaFiles: [],
     textElements: [],
     currentTime: 0,
@@ -33,6 +41,8 @@ export const initialState: ProjectState = {
         format: 'mp4',
         includeSubtitles: false,
     },
+    draggingElement: null,
+    dragOverTrackId: null,
 };
 
 const calculateTotalDuration = (
@@ -66,6 +76,12 @@ const projectStateSlice = createSlice({
     name: 'projectState',
     initialState,
     reducers: {
+        setDraggingElement: (state, action: PayloadAction<{ clip: MediaFile | TextElement, elementType: 'media' | 'text' } | null>) => {
+            state.draggingElement = action.payload;
+        },
+        setDragOverTrackId: (state, action: PayloadAction<string | null>) => {
+            state.dragOverTrackId = action.payload;
+        },
         // Undo/Redo actions
         undo: (state) => {
             if (state.history.length > 0) {
@@ -144,6 +160,33 @@ const projectStateSlice = createSlice({
             state.future = [];
         },
         
+        setTracks: (state, action: PayloadAction<Track[]>) => {
+            addToHistory(state);
+            state.tracks = action.payload;
+        },
+        addTrack: (state, action: PayloadAction<TrackType>) => {
+            addToHistory(state);
+            const type = action.payload;
+            const trackCount = state.tracks.filter(t => t.type === type).length;
+            const newTrack: Track = {
+                id: `track-${type}-${crypto.randomUUID()}`,
+                type,
+                name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${trackCount + 1}`,
+                visible: true,
+                locked: false,
+            };
+            state.tracks.push(newTrack);
+        },
+        removeTrack: (state, action: PayloadAction<string>) => {
+            addToHistory(state);
+            const trackId = action.payload;
+            state.tracks = state.tracks.filter(t => t.id !== trackId);
+            // Also remove elements associated with this track
+            state.mediaFiles = state.mediaFiles.filter(m => m.trackId !== trackId);
+            state.textElements = state.textElements.filter(t => t.trackId !== trackId);
+            state.duration = calculateTotalDuration(state.mediaFiles, state.textElements);
+        },
+        
         setMediaFiles: (state, action: PayloadAction<MediaFile[]>) => {
             addToHistory(state);
             state.mediaFiles = action.payload;
@@ -212,7 +255,7 @@ const projectStateSlice = createSlice({
             state.activeElements = [];
             state.activeGap = null;
         },
-        setActiveGap: (state, action: PayloadAction<{ start: number, end: number, trackType: 'video' | 'audio' | 'image' | 'text' } | null>) => {
+        setActiveGap: (state, action: PayloadAction<{ start: number, end: number, trackId: string, trackType: TrackType } | null>) => {
             state.activeGap = action.payload;
             state.activeElements = [];
         },
@@ -248,7 +291,15 @@ const projectStateSlice = createSlice({
             return { ...state, ...action.payload };
         },
         createNewProject: (state) => {
-            return { ...initialState };
+            const newId = crypto.randomUUID();
+            const now = new Date().toISOString();
+            return {
+                ...initialState,
+                id: newId,
+                createdAt: now,
+                lastModified: now,
+                tracks: createDefaultTracks(),
+            };
         },
     },
 });
@@ -284,6 +335,11 @@ export const {
     setProjectId,
     setProjectCreatedAt,
     setProjectLastModified,
+    setTracks,
+    addTrack,
+    removeTrack,
+    setDraggingElement,
+    setDragOverTrackId,
 } = projectStateSlice.actions;
 
 export default projectStateSlice.reducer; 

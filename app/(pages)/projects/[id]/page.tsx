@@ -377,57 +377,7 @@ export default function Project({ params }: { params: { id: string } }) {
             </div>
 
             {/* Timeline at bottom */}
-            <div className="flex flex-row border-t border-gray-500">
-                <div className=" bg-darkSurfacePrimary flex flex-col items-center justify-center mt-20">
-
-                    <div className="relative h-16">
-                        <div className="flex items-center gap-2 p-4">
-                            <Image
-                                alt="Video"
-                                className="invert h-auto w-auto max-w-[30px] max-h-[30px]"
-                                height={30}
-                                width={30}
-                                src="https://www.svgrepo.com/show/532727/video.svg"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="relative h-16">
-                        <div className="flex items-center gap-2 p-4">
-                            <Image
-                                alt="Audio"
-                                className="invert h-auto w-auto max-w-[30px] max-h-[30px]"
-                                height={30}
-                                width={30}
-                                src="https://www.svgrepo.com/show/532708/music.svg"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="relative h-16">
-                        <div className="flex items-center gap-2 p-4">
-                            <Image
-                                alt="Image"
-                                className="invert h-auto w-auto max-w-[30px] max-h-[30px]"
-                                height={30}
-                                width={30}
-                                src="https://www.svgrepo.com/show/535454/image.svg"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="relative h-16">
-                        <div className="flex items-center gap-2 p-4">
-                            <Image
-                                alt="Text"
-                                className="invert h-auto w-auto max-w-[30px] max-h-[30px]"
-                                height={30}
-                                width={30}
-                                src="https://www.svgrepo.com/show/535686/text.svg"
-                            />
-                        </div>
-                    </div>
-                </div>
+            <div className="border-t border-gray-500">
                 <Timeline />
             </div>
         </div >
