@@ -379,112 +379,23 @@ export const Timeline = () => {
     };
 
     return (
-        <div className="flex w-full flex-col gap-2">
-            <div className="flex flex-row items-center justify-between gap-12 w-full">
-                <div className="flex flex-row items-center gap-2">
-                    {/* Track Marker */}
-                    <div className="relative group">
-                        <button
-                            onClick={() => dispatch(setMarkerTrack(!enableMarkerTracking))}
-                            className={`${
-                                enableMarkerTracking 
-                                    ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/25' 
-                                    : 'bg-white border-transparent text-gray-800 hover:bg-[#ccc]'
-                            } border rounded-md transition-all duration-200 flex flex-row items-center justify-center dark:hover:bg-[#ccc] mt-2 font-medium text-sm sm:text-base h-auto px-2 py-1 sm:w-auto`}
-                        >
-                            {enableMarkerTracking ? (
-                                <div className="relative">
-                                    <Image
-                                        alt="Marker Tracking Enabled"
-                                        className="h-auto w-auto max-w-[20px] max-h-[20px]"
-                                        height={30}
-                                        width={30}
-                                        src="https://www.svgrepo.com/show/447546/yes-alt.svg"
-                                    />
-                                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-white animate-pulse"></div>
-                                </div>
-                            ) : (
-                                <Image
-                                    alt="Marker Tracking Disabled"
-                                    className="h-auto w-auto max-w-[20px] max-h-[20px]"
-                                    height={30}
-                                    width={30}
-                                    src="https://www.svgrepo.com/show/447315/dismiss.svg"
-                                />
-                            )}
-                            <span className="ml-2">
-                                Track Marker 
-                                <span className="text-xs"> (T)</span>
-                                {enableMarkerTracking && (
-                                    <span className="ml-1 inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                                )}
-                            </span>
-                        </button>
-                        
-                        {/* Enhanced Tooltip */}
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap border border-gray-700">
-                            <div className="text-center">
-                                <div className="font-semibold mb-1">
-                                    {enableMarkerTracking ? '🎯 Marker Tracking: ON' : '⭕ Marker Tracking: OFF'}
-                                </div>
-                                <div className="text-gray-300">
-                                    {enableMarkerTracking 
-                                        ? 'Timeline cursor follows playback automatically' 
-                                        : 'Click to enable automatic cursor tracking'
-                                    }
-                                </div>
-                                <div className="text-gray-400 text-[10px] mt-1">
-                                    Press 'T' to toggle
-                                </div>
-                            </div>
-                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                        </div>
-                    </div>
+        <div className="flex w-full flex-col">
+            {/* Unified Control Header */}
+            <div className="flex flex-row items-center justify-between w-full px-4 py-2 bg-[#28272C]">
+                {/* Left Group: Add Track Buttons */}
+                <div className="flex items-center gap-2">
+                    <button onClick={() => handleAddTrack('video')} className="bg-gray-700 text-white px-3 py-1.5 text-xs rounded-md hover:bg-gray-600 transition-colors">Add Video</button>
+                    <button onClick={() => handleAddTrack('audio')} className="bg-gray-700 text-white px-3 py-1.5 text-xs rounded-md hover:bg-gray-600 transition-colors">Add Audio</button>
+                    <button onClick={() => handleAddTrack('image')} className="bg-gray-700 text-white px-3 py-1.5 text-xs rounded-md hover:bg-gray-600 transition-colors">Add Image</button>
+                    <button onClick={() => handleAddTrack('text')} className="bg-gray-700 text-white px-3 py-1.5 text-xs rounded-md hover:bg-gray-600 transition-colors">Add Text</button>
+                </div>
 
-                    {/* Snap Mode */}
-                    <div className="relative group">
-                        <button
-                            onClick={() => dispatch(setSnapMode(!isSnappingEnabled))}
-                            className={`${
-                                isSnappingEnabled
-                                    ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-500/25'
-                                    : 'bg-white border-transparent text-gray-800 hover:bg-[#ccc]'
-                            } border rounded-md transition-all duration-200 flex flex-row items-center justify-center dark:hover:bg-[#ccc] mt-2 font-medium text-sm sm:text-base h-auto px-2 py-1 sm:w-auto`}
-                        >
-                            <Image
-                                alt="Snap Mode"
-                                className="h-auto w-auto max-w-[20px] max-h-[20px]"
-                                height={30}
-                                width={30}
-                                src="https://www.svgrepo.com/show/509160/magnet.svg"
-                            />
-                            <span className="ml-2">
-                                Snap
-                                {isSnappingEnabled && (
-                                    <span className="ml-1 inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                                )}
-                            </span>
-                        </button>
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap border border-gray-700">
-                            <div className="text-center">
-                                <div className="font-semibold mb-1">
-                                    {isSnappingEnabled ? '🧲 Snap Mode: ON' : '⭕ Snap Mode: OFF'}
-                                </div>
-                                <div className="text-gray-300">
-                                    {isSnappingEnabled
-                                        ? 'Elements will snap to each other.'
-                                        : 'Free element movement.'
-                                    }
-                                </div>
-                            </div>
-                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                        </div>
-                    </div>
-
+                {/* Center Group: Editing Tools */}
+                <div className="flex items-center gap-2">
                     {/* Split */}
                     <button
                         onClick={handleSplit}
-                        className="bg-white border rounded-md border-transparent transition-colors flex flex-row items-center justify-center text-gray-800 hover:bg-[#ccc] dark:hover:bg-[#ccc] mt-2 font-medium text-sm sm:text-base h-auto px-2 py-1 sm:w-auto"
+                        className="bg-white border rounded-md border-transparent transition-colors flex flex-row items-center justify-center text-gray-800 hover:bg-[#ccc] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-auto px-2 py-1 sm:w-auto"
                     >
                         <Image
                             alt="cut"
@@ -493,26 +404,26 @@ export const Timeline = () => {
                             width={30}
                             src="https://www.svgrepo.com/show/509075/cut.svg"
                         />
-                        <span className="ml-2">Split <span className="text-xs">(S)</span></span>
+                        <span className="ml-2 hidden sm:inline">Split <span className="text-xs">(S)</span></span>
                     </button>
                     {/* Duplicate */}
                     <button
                         onClick={handleDuplicate}
-                        className="bg-white border rounded-md border-transparent transition-colors flex flex-row items-center justify-center text-gray-800 hover:bg-[#ccc] dark:hover:bg-[#ccc] mt-2 font-medium text-sm sm:text-base h-auto px-2 py-1 sm:w-auto"
+                        className="bg-white border rounded-md border-transparent transition-colors flex flex-row items-center justify-center text-gray-800 hover:bg-[#ccc] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-auto px-2 py-1 sm:w-auto"
                     >
                         <Image
-                            alt="cut"
+                            alt="duplicate"
                             className="h-auto w-auto max-w-[20px] max-h-[20px]"
                             height={30}
                             width={30}
                             src="https://www.svgrepo.com/show/521623/duplicate.svg"
                         />
-                        <span className="ml-2">Duplicate <span className="text-xs">(D)</span></span>
+                        <span className="ml-2 hidden sm:inline">Duplicate <span className="text-xs">(D)</span></span>
                     </button>
                     {/* Delete */}
                     <button
                         onClick={handleDelete}
-                        className="bg-white border rounded-md border-transparent transition-colors flex flex-row items-center justify-center text-gray-800 hover:bg-[#ccc] dark:hover:bg-[#ccc] mt-2 font-medium text-sm sm:text-base h-auto px-2 py-1 sm:w-auto"
+                        className="bg-white border rounded-md border-transparent transition-colors flex flex-row items-center justify-center text-gray-800 hover:bg-[#ccc] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-auto px-2 py-1 sm:w-auto"
                     >
                         <Image
                             alt="Delete"
@@ -521,40 +432,70 @@ export const Timeline = () => {
                             width={30}
                             src="https://www.svgrepo.com/show/511788/delete-1487.svg"
                         />
-                        <span className="ml-2">Delete <span className="text-xs">(Del)</span></span>
+                        <span className="ml-2 hidden sm:inline">Delete <span className="text-xs">(Del)</span></span>
                     </button>
-                    
-                    {/* Marker Tracking Status Indicator */}
-                    {enableMarkerTracking && (
-                        <div className="flex items-center space-x-2 bg-blue-900 bg-opacity-30 border border-blue-500 border-opacity-40 rounded-lg px-3 py-1 mt-2">
-                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                            <span className="text-blue-300 text-xs font-medium">Auto-tracking active</span>
+                </div>
+
+                {/* Right Group: Timeline Settings */}
+                <div className="flex items-center gap-4">
+                    {/* Track Marker */}
+                    <div className="relative group">
+                         <button
+                            onClick={() => dispatch(setMarkerTrack(!enableMarkerTracking))}
+                            className={`${
+                                enableMarkerTracking 
+                                    ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/25' 
+                                    : 'bg-white border-transparent text-gray-800 hover:bg-[#ccc]'
+                            } border rounded-md transition-all duration-200 flex flex-row items-center justify-center dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-auto px-2 py-1 sm:w-auto`}
+                        >
+                            <Image
+                                alt="Marker Tracking"
+                                className="h-auto w-auto max-w-[20px] max-h-[20px]"
+                                height={30}
+                                width={30}
+                                src="https://www.svgrepo.com/show/447546/yes-alt.svg"
+                            />
+                        </button>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap border border-gray-700">
+                           <div className="font-semibold">{enableMarkerTracking ? 'Marker Tracking: ON' : 'Marker Tracking: OFF'}</div>
                         </div>
-                    )}
+                    </div>
+                     {/* Snap Mode */}
+                    <div className="relative group">
+                        <button
+                            onClick={() => dispatch(setSnapMode(!isSnappingEnabled))}
+                            className={`${
+                                isSnappingEnabled
+                                    ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-500/25'
+                                    : 'bg-white border-transparent text-gray-800 hover:bg-[#ccc]'
+                            } border rounded-md transition-all duration-200 flex flex-row items-center justify-center dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-auto px-2 py-1 sm:w-auto`}
+                        >
+                            <Image
+                                alt="Snap Mode"
+                                className="h-auto w-auto max-w-[20px] max-h-[20px]"
+                                height={30}
+                                width={30}
+                                src="https://www.svgrepo.com/show/509160/magnet.svg"
+                            />
+                        </button>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap border border-gray-700">
+                             <div className="font-semibold">{isSnappingEnabled ? 'Snap Mode: ON' : 'Snap Mode: OFF'}</div>
+                        </div>
+                    </div>
+                    {/* Timeline Zoom */}
+                    <div className="flex flex-row items-center gap-2">
+                        <label className="block text-sm font-semibold text-white">Zoom</label>
+                        <input
+                            type="range"
+                            min={1}
+                            max={1000}
+                            step="1"
+                            value={timelineZoom}
+                            onChange={(e) => throttledZoom(Number(e.target.value))}
+                            className="w-[100px] bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:border-white-500"
+                        />
+                    </div>
                 </div>
-
-                {/* Timeline Zoom */}
-                <div className="flex flex-row justify-between items-center gap-2 mr-4">
-                    <label className="block text-sm mt-1 font-semibold text-white">Zoom</label>
-                    <span className="text-white text-lg">-</span>
-                    <input
-                        type="range"
-                        min={1}
-                        max={1000}
-                        step="1"
-                        value={timelineZoom}
-                        onChange={(e) => throttledZoom(Number(e.target.value))}
-                        className="w-[100px] bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:border-white-500"
-                    />
-                    <span className="text-white text-lg">+</span>
-                </div>
-            </div>
-
-            <div className="flex flex-row items-center gap-2 mb-2">
-                <button onClick={() => handleAddTrack('video')} className="bg-gray-700 text-white px-2 py-1 text-xs rounded">Add Video Track</button>
-                <button onClick={() => handleAddTrack('audio')} className="bg-gray-700 text-white px-2 py-1 text-xs rounded">Add Audio Track</button>
-                <button onClick={() => handleAddTrack('image')} className="bg-gray-700 text-white px-2 py-1 text-xs rounded">Add Image Track</button>
-                <button onClick={() => handleAddTrack('text')} className="bg-gray-700 text-white px-2 py-1 text-xs rounded">Add Text Track</button>
             </div>
 
             <div className="flex w-full">
