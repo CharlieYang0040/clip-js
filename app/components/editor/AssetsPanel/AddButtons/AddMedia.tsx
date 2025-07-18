@@ -92,11 +92,9 @@ export default function AddMedia({ fileId }: { fileId: string }) {
             startTime: 0,
             endTime: duration,
             sourceDuration: duration,
-            zIndex: 0,
-            width: width,
-            height: height,
             x: 0,
             y: 0,
+            layerOrder: 0,
             opacity: 100,
             volume: mediaType === 'audio' || mediaType === 'video' ? 100 : 0,
         };

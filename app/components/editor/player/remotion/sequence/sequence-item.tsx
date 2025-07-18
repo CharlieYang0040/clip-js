@@ -23,7 +23,7 @@ const calculateFrames = (
 export const SequenceItem: Record<
     string,
     (item: any, options: SequenceItemOptions) => JSX.Element> = {
-    video: (item: MediaFile, options: SequenceItemOptions) => {
+    video: (item: MediaFile & { zIndex: number }, options: SequenceItemOptions) => {
         const { fps } = options;
 
         const playbackRate = item.playbackSpeed || 1;
@@ -92,7 +92,7 @@ export const SequenceItem: Record<
             </Sequence>
         );
     },
-    text: (item: TextElement, options: SequenceItemOptions) => {
+    text: (item: TextElement & { zIndex: number }, options: SequenceItemOptions) => {
         const { handleTextChange, fps, editableTextId } = options;
 
 
@@ -122,7 +122,7 @@ export const SequenceItem: Record<
                     color: item.color || "#000000",
                     // backgroundColor: item.backgroundColor || "transparent",
                     opacity: item.opacity! / 100,
-                    fontFamily: item.font || "Arial",
+                    fontFamily: item.fontFamily || "Arial",
                 }}
             >
                 <div
@@ -137,13 +137,13 @@ export const SequenceItem: Record<
                         position: "relative",
                         width: "100%",
                     }}
-                    dangerouslySetInnerHTML={{ __html: item.text }}
+                    dangerouslySetInnerHTML={{ __html: item.content }}
                     className="designcombo_textLayer"
                 />
             </Sequence>
         );
     },
-    image: (item: MediaFile, options: SequenceItemOptions) => {
+    image: (item: MediaFile & { zIndex: number }, options: SequenceItemOptions) => {
         const { fps } = options;
 
         const { from, durationInFrames } = calculateFrames(

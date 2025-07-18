@@ -5,7 +5,7 @@ import { getFile, useAppSelector } from "@/app/store";
 import { Heart } from "lucide-react";
 import Image from "next/image";
 import { extractConfigs } from "@/app/utils/extractConfigs";
-import { mimeToExt } from "@/app/types";
+import { MediaFile, TextElement, mimeToExt } from "@/app/types";
 import { toast } from "react-hot-toast";
 import FfmpegProgressBar from "./ProgressBar";
 
@@ -60,95 +60,86 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
 
                 // Create base black background
                 filters.push(`color=c=black:size=1920x1080:d=${totalDuration.toFixed(3)}[base]`);
-                // Sort videos by zIndex ascending (lowest drawn first)
-                const sortedMediaFiles = [...mediaFiles].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
-                for (let i = 0; i < sortedMediaFiles.length; i++) {
+                const { tracks } = useAppSelector(state => state.projectState);
 
-                    // timing
-                    const { startTime, positionStart, positionEnd } = sortedMediaFiles[i];
-                    const duration = positionEnd - positionStart;
+                const allElements = [
+                    ...mediaFiles.map(item => ({ ...item, elementType: item.type })),
+                    ...textElements.map(item => ({ ...item, elementType: 'text' as const }))
+                ];
 
-                    // get the file data and write to ffmpeg
-                    const fileData = await getFile(sortedMediaFiles[i].url!);
-                    const buffer = await fileData.arrayBuffer();
-                    const ext = mimeToExt[fileData.type as keyof typeof mimeToExt] || fileData.type.split('/')[1];
-                    await ffmpeg.writeFile(`input${i}.${ext}`, new Uint8Array(buffer));
+                const sortedElements = allElements.map(item => {
+                    const trackIndex = tracks.findIndex(t => t.id === item.trackId);
+                    const totalTracks = tracks.length;
+                    const baseZIndex = (totalTracks - trackIndex - 1) * 10;
+                    const finalZIndex = baseZIndex + (item.layerOrder || 0);
+                    return { ...item, zIndex: finalZIndex };
+                }).sort((a, b) => a.zIndex - b.zIndex);
 
-                    // TODO: currently we have to write same file if it's used more than once in different clips the below approach is a good start to change this 
-                    // let wroteFiles = new Map<string, string>();
-                    // const { fileId, type } = sortedMediaFiles[i];
-                    // let inputFilename: string;
 
-                    // if (wroteFiles.has(fileId)) {
-                    //     inputFilename = wroteFiles.get(fileId)!;
-                    // } else {
-                    //     const fileData = await getFile(fileId);
-                    //     const buffer = await fileData.arrayBuffer();
-                    //     const ext = mimeToExt[fileData.type as keyof typeof mimeToExt] || fileData.type.split('/')[1];
-                    //     inputFilename = `input_${fileId}.${ext}`;
-                    //     await ffmpeg.writeFile(inputFilename, new Uint8Array(buffer));
-                    //     wroteFiles.set(fileId, inputFilename);
-                    // }
+                for (let i = 0; i < sortedElements.length; i++) {
+                    const element = sortedElements[i];
 
-                    if (sortedMediaFiles[i].type === 'image') {
-                        inputs.push('-loop', '1', '-t', duration.toFixed(3), '-i', `input${i}.${ext}`);
-                    }
-                    else {
-                        inputs.push('-i', `input${i}.${ext}`);
-                    }
+                    if (element.elementType === 'video' || element.elementType === 'image' || element.elementType === 'audio') {
+                        // Media file processing
+                        const { startTime, positionStart, positionEnd } = element;
+                        const duration = positionEnd - positionStart;
 
-                    const visualLabel = `visual${i}`;
-                    const audioLabel = `audio${i}`;
+                        const fileData = await getFile(element.url!);
+                        const buffer = await fileData.arrayBuffer();
+                        const ext = mimeToExt[fileData.type as keyof typeof mimeToExt] || fileData.type.split('/')[1];
+                        await ffmpeg.writeFile(`input${i}.${ext}`, new Uint8Array(buffer));
 
-                    // Shift clip to correct place on timeline (video)
-                    if (sortedMediaFiles[i].type === 'video') {
-                        filters.push(
-                            `[${i}:v]trim=start=${startTime.toFixed(3)}:duration=${duration.toFixed(3)},scale=${sortedMediaFiles[i].width}:${sortedMediaFiles[i].height},setpts=PTS-STARTPTS+${positionStart.toFixed(3)}/TB[${visualLabel}]`
-                        );
-                    }
-                    if (sortedMediaFiles[i].type === 'image') {
-                        filters.push(
-                            `[${i}:v]scale=${sortedMediaFiles[i].width}:${sortedMediaFiles[i].height},setpts=PTS+${positionStart.toFixed(3)}/TB[${visualLabel}]`
-                        );
-                    }
+                        if (element.type === 'image') {
+                            inputs.push('-loop', '1', '-t', duration.toFixed(3), '-i', `input${i}.${ext}`);
+                        } else {
+                            inputs.push('-i', `input${i}.${ext}`);
+                        }
 
-                    // Apply opacity
-                    if (sortedMediaFiles[i].type === 'video' || sortedMediaFiles[i].type === 'image') {
-                        const alpha = Math.min(Math.max((sortedMediaFiles[i].opacity || 100) / 100, 0), 1);
-                        filters.push(
-                            `[${visualLabel}]format=yuva420p,colorchannelmixer=aa=${alpha}[${visualLabel}]`
-                        );
-                    }
+                        const visualLabel = `visual${i}`;
+                        const audioLabel = `audio${i}`;
 
-                    // Store overlay range that matches shifted time
-                    if (sortedMediaFiles[i].type === 'video' || sortedMediaFiles[i].type === 'image') {
-                        overlays.push({
-                            label: visualLabel,
-                            x: sortedMediaFiles[i].x,
-                            y: sortedMediaFiles[i].y,
-                            start: positionStart.toFixed(3),
-                            end: positionEnd.toFixed(3),
-                        });
-                    }
+                        if (element.type === 'video') {
+                            filters.push(
+                                `[${i}:v]trim=start=${startTime.toFixed(3)}:duration=${duration.toFixed(3)},scale=${element.width}:${element.height},setpts=PTS-STARTPTS+${positionStart.toFixed(3)}/TB[${visualLabel}]`
+                            );
+                        }
+                        if (element.type === 'image') {
+                            filters.push(
+                                `[${i}:v]scale=${element.width}:${element.height},setpts=PTS+${positionStart.toFixed(3)}/TB[${visualLabel}]`
+                            );
+                        }
 
-                    // Audio: trim, then delay (in ms)
-                    if (sortedMediaFiles[i].type === 'audio' || sortedMediaFiles[i].type === 'video') {
-                        const delayMs = Math.round(positionStart * 1000);
-                        const volume = sortedMediaFiles[i].volume !== undefined ? sortedMediaFiles[i].volume / 100 : 1;
-                        filters.push(
-                            `[${i}:a]atrim=start=${startTime.toFixed(3)}:duration=${duration.toFixed(3)},asetpts=PTS-STARTPTS,adelay=${delayMs}|${delayMs},volume=${volume}[${audioLabel}]`
-                        );
-                        audioDelays.push(`[${audioLabel}]`);
+                        if (element.type === 'video' || element.type === 'image') {
+                            const alpha = Math.min(Math.max((element.opacity || 100) / 100, 0), 1);
+                            filters.push(
+                                `[${visualLabel}]format=yuva420p,colorchannelmixer=aa=${alpha}[${visualLabel}]`
+                            );
+                            overlays.push({
+                                label: visualLabel,
+                                x: element.x,
+                                y: element.y,
+                                start: positionStart.toFixed(3),
+                                end: positionEnd.toFixed(3),
+                            });
+                        }
+
+                        if (element.type === 'audio' || element.type === 'video') {
+                            const delayMs = Math.round(positionStart * 1000);
+                            const volume = element.volume !== undefined ? element.volume / 100 : 1;
+                            filters.push(
+                                `[${i}:a]atrim=start=${startTime.toFixed(3)}:duration=${duration.toFixed(3)},asetpts=PTS-STARTPTS,adelay=${delayMs}|${delayMs},volume=${volume}[${audioLabel}]`
+                            );
+                            audioDelays.push(`[${audioLabel}]`);
+                        }
                     }
                 }
 
-                // Apply overlays in z-index order
                 let lastLabel = 'base';
                 if (overlays.length > 0) {
                     for (let i = 0; i < overlays.length; i++) {
                         const { label, start, end, x, y } = overlays[i];
-                        const nextLabel = i === overlays.length - 1 ? 'outv' : `tmp${i}`;
+                        const nextLabel = `tmp${i}`;
                         filters.push(
                             `[${lastLabel}][${label}]overlay=${x}:${y}:enable='between(t\\,${start}\\,${end})'[${nextLabel}]`
                         );
@@ -156,29 +147,38 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
                     }
                 }
 
-                // Apply text 
-                if (textElements.length > 0) {
-                    // load fonts
-                    let fonts = ['Arial', 'Inter', 'Lato'];
-                    for (let i = 0; i < fonts.length; i++) {
-                        const font = fonts[i];
-                        const res = await fetch(`/fonts/${font}.ttf`);
-                        const fontBuf = await res.arrayBuffer();
-                        await ffmpeg.writeFile(`font${font}.ttf`, new Uint8Array(fontBuf));
-                    }
-                    // Apply text
-                    for (let i = 0; i < textElements.length; i++) {
-                        const text = textElements[i];
-                        const label = i === textElements.length - 1 ? 'outv' : `text${i}`;
-                        const escapedText = text.text.replace(/:/g, '\\:').replace(/'/g, "\\\\'");
+                const textElementsToRender = sortedElements.filter(el => el.elementType === 'text');
+                if (textElementsToRender.length > 0) {
+                     // load fonts
+                     let fonts = ['Arial', 'Inter', 'Lato'];
+                     for (let i = 0; i < fonts.length; i++) {
+                         const font = fonts[i];
+                         const res = await fetch(`/fonts/${font}.ttf`);
+                         const fontBuf = await res.arrayBuffer();
+                         await ffmpeg.writeFile(`font${font}.ttf`, new Uint8Array(fontBuf));
+                     }
+                    for (let i = 0; i < textElementsToRender.length; i++) {
+                        const text = textElementsToRender[i] as TextElement;
+                        const label = i === textElementsToRender.length - 1 ? 'outv' : `text${i}`;
+                        const escapedText = text.content.replace(/:/g, '\\:').replace(/'/g, "\\\\'");
                         const alpha = Math.min(Math.max((text.opacity ?? 100) / 100, 0), 1);
                         const color = text.color?.includes('@') ? text.color : `${text.color || 'white'}@${alpha}`;
                         filters.push(
-                            `[${lastLabel}]drawtext=fontfile=font${text.font}.ttf:text='${escapedText}':x=${text.x}:y=${text.y}:fontsize=${text.fontSize || 24}:fontcolor=${color}:enable='between(t\\,${text.positionStart}\\,${text.positionEnd})'[${label}]`
+                            `[${lastLabel}]drawtext=fontfile=font${text.fontFamily}.ttf:text='${escapedText}':x=${text.x}:y=${text.y}:fontsize=${text.fontSize || 24}:fontcolor=${color}:enable='between(t\\,${text.positionStart}\\,${text.positionEnd})'[${label}]`
                         );
                         lastLabel = label;
                     }
                 }
+                
+                if (overlays.length === 0 && textElementsToRender.length > 0) {
+                    filters.push(`[${lastLabel}]copy[outv]`);
+                } else if (overlays.length > 0) {
+                    const finalOutputLabel = textElementsToRender.length > 0 ? `text${textElementsToRender.length - 1}` : `tmp${overlays.length - 1}`;
+                    filters.push(`[${finalOutputLabel}]copy[outv]`);
+                } else {
+                    filters.push(`[base]copy[outv]`);
+                }
+
 
                 // Mix all audio tracks
                 if (audioDelays.length > 0) {

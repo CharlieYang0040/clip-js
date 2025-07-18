@@ -96,7 +96,7 @@ export default function AssetItem({ fileId }: { fileId: string }) {
             startTime: 0,
             endTime: duration,
             sourceDuration: duration,
-            zIndex: 0,
+            layerOrder: 0,
             x: 0, y: 0, opacity: 100,
         };
 
@@ -113,7 +113,7 @@ export default function AssetItem({ fileId }: { fileId: string }) {
             startTime: 0,
             endTime: duration,
             sourceDuration: duration,
-            zIndex: 0,
+            layerOrder: 0,
             x: 0, y: 0, opacity: 100,
         };
 

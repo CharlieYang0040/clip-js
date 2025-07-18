@@ -27,7 +27,7 @@ export interface MediaFile {
     startTime: number;
     endTime: number;
     sourceDuration: number;
-    zIndex: number;
+    layerOrder: number;
     width?: number;
     height?: number;
     opacity?: number;
@@ -46,37 +46,25 @@ export interface MediaFile {
 
 export interface TextElement {
     id: string;
-    type: 'text';
-    text: string;                     // The actual text content
     trackId: string;
-    includeInMerge?: boolean;
-
-    // Timing
-    positionStart: number;           // When text appears in final video
-    positionEnd: number;             // When text disappears
-
-    // Position & Size (canvas-based)
+    type: 'text';
+    content: string;
+    fontFamily: string;
+    fontSize: number;
+    color: string;
+    backgroundColor?: string;
+    positionStart: number;
+    positionEnd: number;
+    layerOrder?: number;                 // Layering
     x: number;
     y: number;
     width?: number;
     height?: number;
-
-    // Styling
-    font?: string;                   // Font family (e.g., 'Arial', 'Roboto')
-    fontSize?: number;               // Font size in pixels
-    color?: string;                  // Text color (hex or rgba)
-    backgroundColor?: string;       // Background behind text
-    align?: 'left' | 'center' | 'right'; // Horizontal alignment
-    zIndex?: number;                 // Layering
-
-    // Effects
-    opacity?: number;                // Transparency (0 to 1)
+    opacity?: number;
     rotation?: number;               // Rotation in degrees
     fadeInDuration?: number;        // Seconds to fade in
     fadeOutDuration?: number;       // Seconds to fade out
     animation?: 'slide-in' | 'zoom' | 'bounce' | 'none'; // Optional animation
-
-    // Runtime only (not persisted)
     visible?: boolean;              // Internal flag for rendering logic
 }
 

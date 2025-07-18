@@ -186,6 +186,17 @@ const projectStateSlice = createSlice({
             state.textElements = state.textElements.filter(t => t.trackId !== trackId);
             state.duration = calculateTotalDuration(state.mediaFiles, state.textElements);
         },
+        reorderTracks: (state, action: PayloadAction<{ draggingTrackId: string; dropTrackId: string }>) => {
+            addToHistory(state);
+            const { draggingTrackId, dropTrackId } = action.payload;
+            const draggingIndex = state.tracks.findIndex(t => t.id === draggingTrackId);
+            const dropIndex = state.tracks.findIndex(t => t.id === dropTrackId);
+
+            if (draggingIndex > -1 && dropIndex > -1) {
+                const [draggedTrack] = state.tracks.splice(draggingIndex, 1);
+                state.tracks.splice(dropIndex, 0, draggedTrack);
+            }
+        },
         
         setMediaFiles: (state, action: PayloadAction<MediaFile[]>) => {
             addToHistory(state);
@@ -338,6 +349,7 @@ export const {
     setTracks,
     addTrack,
     removeTrack,
+    reorderTracks,
     setDraggingElement,
     setDragOverTrackId,
 } = projectStateSlice.actions;

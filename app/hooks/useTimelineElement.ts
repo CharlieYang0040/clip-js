@@ -6,7 +6,7 @@ import { OnDrag, OnDragStart, OnResize, OnResizeStart, OnResizeEnd, OnDragEnd } 
 
 const MIN_DURATION = 0.1;
 
-type ElementType = MediaFile | TextElement;
+type ElementType = (MediaFile | TextElement) & { zIndex?: number };
 
 interface UseTimelineElementProps<T extends ElementType> {
     clip: T;

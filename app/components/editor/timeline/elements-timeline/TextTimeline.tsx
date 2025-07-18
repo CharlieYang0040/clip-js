@@ -33,7 +33,7 @@ const TextClipItem = memo(({
     isSelected,
     activeElementsLength
 }: {
-    clip: TextElement;
+    clip: TextElement & { zIndex: number };
     timelineZoom: number;
     isSnappingEnabled: boolean;
     verticalGuidelines: number[];
@@ -78,7 +78,7 @@ const TextClipItem = memo(({
             <div
                 data-element-id={clip.id}
                 ref={setTarget}
-                className={`absolute border border-gray-500 border-opacity-50 rounded-md top-2 h-12 rounded bg-[#27272A] text-white text-sm flex items-center justify-center cursor-pointer ${isSelected(clip.id) ? 'bg-[#3F3F46] border-blue-500' : ''}`}
+                className={`absolute border border-gray-500 border-opacity-50 rounded-md top-4 h-12 rounded bg-[#27272A] text-white text-sm flex items-center justify-center cursor-pointer ${isSelected(clip.id) ? 'bg-[#3F3F46] border-blue-500' : ''}`}
                 style={{
                     left: `${clip.positionStart * timelineZoom}px`,
                     width: `${(clip.positionEnd - clip.positionStart) * timelineZoom}px`,
@@ -92,7 +92,7 @@ const TextClipItem = memo(({
                     width={30}
                     src="https://www.svgrepo.com/show/535686/text.svg"
                 />
-                <span className="truncate text-x">{clip.text}</span>
+                <span className="truncate text-x">{clip.content}</span>
             </div>
             <Moveable
                 ref={moveableRef}
@@ -116,7 +116,7 @@ const TextClipItem = memo(({
 });
 TextClipItem.displayName = 'TextClipItem';
 
-export default function TextTimeline({ trackId }: { trackId: string }) {
+export default function TextTimeline({ trackId, trackIndex, totalTracks }: { trackId: string, trackIndex: number, totalTracks: number }) {
     const targetRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const { mediaFiles, textElements, activeElements, timelineZoom, isSnappingEnabled, currentTime, activeGap, duration } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
@@ -192,17 +192,21 @@ export default function TextTimeline({ trackId }: { trackId: string }) {
                     onClick={(e) => handleGapClick(gap, e)}
                 />
             ))}
-            {sortedTextElements.map((clip) => (
-                <TextClipItem
-                    key={clip.id}
-                    clip={clip}
-                    timelineZoom={timelineZoom}
-                    isSnappingEnabled={isSnappingEnabled}
-                    verticalGuidelines={verticalGuidelines}
-                    isSelected={isSelected}
-                    activeElementsLength={activeElements.length}
-                />
-            ))}
+            {sortedTextElements.map((clip) => {
+                const baseZIndex = (totalTracks - trackIndex - 1) * 10;
+                const finalZIndex = baseZIndex + (clip.layerOrder || 0);
+                return (
+                    <TextClipItem
+                        key={clip.id}
+                        clip={{...clip, zIndex: finalZIndex}}
+                        timelineZoom={timelineZoom}
+                        isSnappingEnabled={isSnappingEnabled}
+                        verticalGuidelines={verticalGuidelines}
+                        isSelected={isSelected}
+                        activeElementsLength={activeElements.length}
+                    />
+                );
+            })}
         </div>
     );
 }

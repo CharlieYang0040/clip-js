@@ -27,8 +27,8 @@ export default function TextProperties() {
                     <h4 className="font-semibold">Text Content</h4>
                     <div>
                         <textarea
-                            value={textElement.text}
-                            onChange={(e) => onUpdateText(textElement.id, { text: e.target.value })}
+                            value={textElement.content}
+                            onChange={(e) => onUpdateText(textElement.id, { content: e.target.value })}
                             className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-white-500 focus:border-white-500"
                             rows={3}
                         />
@@ -101,22 +101,21 @@ export default function TextProperties() {
                                 className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-white-500 focus:border-white-500"
                             />
                         </div>
-                        {/* TODO: add z-index */}
-                        {/* <div>
-                            <label className="block text-sm">Z-Index</label>
+                        <div className='flex flex-col gap-2'>
+                            <label className="text-sm">Z-index</label>
                             <input
                                 type="number"
-                                value={textElement.zIndex || 0}
-                                onChange={(e) => onUpdateText(textElement.id, { zIndex: Number(e.target.value) })}
-                                className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-white-500 focus:border-white-500"
+                                className="p-2 bg-gray-700 rounded"
+                                value={textElement.layerOrder || 0}
+                                onChange={(e) => onUpdateText(textElement.id, { layerOrder: Number(e.target.value) })}
                             />
-                        </div> */}
+                        </div>
                         {/* Font Type */}
                         <div >
                             <label className="block text-sm font-medium text-white">Font Type</label>
                             <select
-                                value={textElement.font}
-                                onChange={(e) => onUpdateText(textElement.id, { font: e.target.value })}
+                                value={textElement.fontFamily}
+                                onChange={(e) => onUpdateText(textElement.id, { fontFamily: e.target.value })}
                                 className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-white-500 focus:border-white-500"
                             >
                                 <option value="Arial">Arial</option>

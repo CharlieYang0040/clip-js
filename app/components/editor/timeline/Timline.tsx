@@ -1,5 +1,5 @@
 import { useAppSelector } from "@/app/store";
-import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setSnapMode, setActiveGap, toggleActiveElement, resetActiveElements, addTrack, removeTrack } from "@/app/store/slices/projectSlice";
+import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setSnapMode, setActiveGap, toggleActiveElement, resetActiveElements, addTrack, removeTrack, reorderTracks } from "@/app/store/slices/projectSlice";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
@@ -31,6 +31,8 @@ export const Timeline = () => {
     const [localCurrentTime, setLocalCurrentTime] = useState(currentTime);
     const prevZoomRef = useRef(timelineZoom);
     const lastDragX = useRef(0);
+    const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
+    const [dragOverTrackHeaderId, setDragOverTrackHeaderId] = useState<string | null>(null);
 
     const animationFrameRef = useRef<number | null>(null);
 
@@ -355,6 +357,27 @@ export const Timeline = () => {
         toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} track added.`);
     }
 
+    const handleTrackDragStart = (e: React.DragEvent<HTMLDivElement>, trackId: string) => {
+        setDraggingTrackId(trackId);
+        e.dataTransfer.effectAllowed = "move";
+    };
+
+    const handleTrackDragOver = (e: React.DragEvent<HTMLDivElement>, trackId: string) => {
+        e.preventDefault();
+        if (draggingTrackId && draggingTrackId !== trackId) {
+            setDragOverTrackHeaderId(trackId);
+        }
+    };
+
+    const handleTrackDrop = (e: React.DragEvent<HTMLDivElement>, dropTrackId: string) => {
+        e.preventDefault();
+        if (draggingTrackId && draggingTrackId !== dropTrackId) {
+            dispatch(reorderTracks({ draggingTrackId, dropTrackId }));
+        }
+        setDraggingTrackId(null);
+        setDragOverTrackHeaderId(null);
+    };
+
     return (
         <div className="flex w-full flex-col gap-2">
             <div className="flex flex-row items-center justify-between gap-12 w-full">
@@ -543,7 +566,16 @@ export const Timeline = () => {
                     {tracks.map((track: Track) => {
                         const icon = trackTypeIcons[track.type];
                         return (
-                            <div key={track.id} className="h-20 flex flex-col items-center justify-center p-2 border-b border-gray-700">
+                            <div 
+                                key={track.id} 
+                                draggable="true"
+                                onDragStart={(e) => handleTrackDragStart(e, track.id)}
+                                onDragOver={(e) => handleTrackDragOver(e, track.id)}
+                                onDrop={(e) => handleTrackDrop(e, track.id)}
+                                onDragLeave={() => setDragOverTrackHeaderId(null)}
+                                onDragEnd={() => { setDraggingTrackId(null); setDragOverTrackHeaderId(null); }}
+                                className={`group relative h-20 flex flex-col items-center justify-center p-2 border-b border-gray-700 cursor-grab ${draggingTrackId === track.id ? 'opacity-50' : ''} ${dragOverTrackHeaderId === track.id ? 'bg-blue-500 bg-opacity-30' : ''}`}
+                            >
                                 {icon && (
                                     <Image
                                         src={icon.src}
@@ -554,11 +586,16 @@ export const Timeline = () => {
                                     />
                                 )}
                                 <span className="text-white text-sm font-semibold truncate">{track.name}</span>
-                                <button 
-                                    onClick={() => dispatch(removeTrack(track.id))}
-                                    className="text-red-500 hover:text-red-400 text-xs mt-1"
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        dispatch(removeTrack(track.id));
+                                    }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    className="absolute top-1 right-1 z-10 p-1 rounded-full text-white bg-black bg-opacity-30 opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all duration-200"
+                                    aria-label="Remove track"
                                 >
-                                    Remove
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                                 </button>
                             </div>
                         )
@@ -596,17 +633,18 @@ export const Timeline = () => {
                         </div>
                         
                         <div className="w-full h-full relative">
-                            {tracks.map((track: Track) => {
+                            {tracks.map((track: Track, index) => {
+                                const totalTracks = tracks.length;
                                 const component = (() => {
                                     switch (track.type) {
                                         case 'video':
-                                            return <VideoTimeline trackId={track.id} />;
+                                            return <VideoTimeline trackId={track.id} trackIndex={index} totalTracks={totalTracks} />;
                                         case 'audio':
-                                            return <AudioTimeline trackId={track.id} />;
+                                            return <AudioTimeline trackId={track.id} trackIndex={index} totalTracks={totalTracks} />;
                                         case 'image':
-                                            return <ImageTimeline trackId={track.id} />;
+                                            return <ImageTimeline trackId={track.id} trackIndex={index} totalTracks={totalTracks} />;
                                         case 'text':
-                                            return <TextTimeline trackId={track.id} />;
+                                            return <TextTimeline trackId={track.id} trackIndex={index} totalTracks={totalTracks} />;
                                         default:
                                             return null;
                                     }

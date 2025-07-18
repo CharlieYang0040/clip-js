@@ -7,7 +7,7 @@ import { setCurrentTime, setMediaFiles } from "@/app/store/slices/projectSlice";
 
 const Composition = () => {
     const projectState = useAppSelector((state) => state.projectState);
-    const { mediaFiles, textElements, currentTime } = projectState;
+    const { mediaFiles, textElements, currentTime, tracks } = projectState;
     const frame = useCurrentFrame();
     const dispatch = useAppDispatch();
 
@@ -52,28 +52,36 @@ const Composition = () => {
     }, [frame, dispatch, currentTime]);
 
     const fps = 30;
+
+    const allElements = [
+        ...mediaFiles.map(item => ({ ...item, elementType: item.type })),
+        ...textElements.map(item => ({ ...item, elementType: 'text' as const }))
+    ];
+
+    const sortedElements = allElements.map(item => {
+        const trackIndex = tracks.findIndex(t => t.id === item.trackId);
+        const totalTracks = tracks.length;
+        const baseZIndex = (totalTracks - trackIndex - 1) * 10;
+        const finalZIndex = baseZIndex + (item.layerOrder || 0);
+        return { ...item, zIndex: finalZIndex };
+    }).sort((a, b) => a.zIndex - b.zIndex);
+
     return (
         <>
-            {mediaFiles
-                .filter((item: MediaFile) => item && item.src)
-                .map((item: MediaFile) => {
-                    const trackItem = {
-                        ...item,
-                    } as MediaFile;
-                    return SequenceItem[trackItem.type](trackItem, {
-                        fps
-                    });
-                })}
-            {textElements
-                .map((item: TextElement) => {
-                    if (!item) return;
-                    const trackItem = {
-                        ...item,
-                    } as TextElement;
-                    return SequenceItem["text"](trackItem, {
-                        fps
-                    });
-                })}
+            {sortedElements.map((item) => {
+                if ('src' in item && !item.src) return null;
+                const { elementType, ...trackItem } = item;
+                
+                if (elementType === 'audio') {
+                    return SequenceItem[elementType](trackItem, { fps });
+                }
+                
+                if (elementType === 'video' || elementType === 'image' || elementType === 'text') {
+                    return SequenceItem[elementType](trackItem, { fps });
+                }
+
+                return null;
+            })}
         </>
     );
 };
