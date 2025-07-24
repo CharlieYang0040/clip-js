@@ -5,6 +5,7 @@ import { MediaFile, TextElement, SelectedElement } from '@/app/types';
 import { OnDrag, OnDragStart, OnResize, OnResizeStart, OnResizeEnd, OnDragEnd } from 'react-moveable';
 
 const MIN_DURATION = 0.1;
+const SNAP_THRESHOLD_PX = 10; // Snap sensitivity in pixels
 
 type ElementType = (MediaFile | TextElement) & { zIndex?: number };
 
@@ -18,7 +19,7 @@ export function useTimelineElement<T extends ElementType>({
     elementType,
 }: UseTimelineElementProps<T>) {
     const dispatch = useAppDispatch();
-    const { timelineZoom, activeElements, mediaFiles, textElements, dragOverTrackId, tracks } = useAppSelector((state) => state.projectState);
+    const { timelineZoom, activeElements, mediaFiles, textElements, dragOverTrackId, tracks, isSnappingEnabled, currentTime } = useAppSelector((state) => state.projectState);
     const [dragStates, setDragStates] = useState<Record<string, { startX: number; startLeft: number }>>({});
     const [resizeInfo, setResizeInfo] = useState<{
         visible: boolean;
@@ -74,14 +75,67 @@ export function useTimelineElement<T extends ElementType>({
     };
 
     const onDrag = (e: OnDrag) => {
-        const { transform, clientY } = e;
+        const { transform, clientY, dist } = e;
+        let newTransform = transform;
+
+        if (isSnappingEnabled) {
+            const allElements = [...mediaFiles, ...textElements];
+            const otherElements = allElements.filter(el => !dragStates[el.id]);
+            const currentElementDuration = clip.positionEnd - clip.positionStart;
+
+            const elementSnapPoints = otherElements.flatMap(el => [el.positionStart, el.positionEnd]);
+            const markerSnapPoint = [currentTime];
+
+            const currentLeft = dragStates[clip.id].startLeft + dist[0];
+            const currentStart = currentLeft / timelineZoom;
+            const currentEnd = currentStart + currentElementDuration;
+
+            let snapDelta = 0;
+
+            // Priority 1: Snap to other elements
+            for (const point of elementSnapPoints) {
+                const startDiff = Math.abs(currentStart - point) * timelineZoom;
+                const endDiff = Math.abs(currentEnd - point) * timelineZoom;
+
+                if (startDiff < SNAP_THRESHOLD_PX) {
+                    snapDelta = (point - currentStart) * timelineZoom;
+                    break;
+                }
+                if (endDiff < SNAP_THRESHOLD_PX) {
+                    snapDelta = (point - currentEnd) * timelineZoom;
+                    break;
+                }
+            }
+
+            // Priority 2: Snap to marker if no element snap
+            if (snapDelta === 0) {
+                for (const point of markerSnapPoint) {
+                    const startDiff = Math.abs(currentStart - point) * timelineZoom;
+                    const endDiff = Math.abs(currentEnd - point) * timelineZoom;
+
+                    if (startDiff < SNAP_THRESHOLD_PX) {
+                        snapDelta = (point - currentStart) * timelineZoom;
+                        break;
+                    }
+                    if (endDiff < SNAP_THRESHOLD_PX) {
+                        snapDelta = (point - currentEnd) * timelineZoom;
+                        break;
+                    }
+                }
+            }
+
+            if (snapDelta !== 0) {
+                newTransform = `translate(${dist[0] + snapDelta}px, 0px)`;
+            }
+        }
+
         Object.keys(dragStates).forEach(id => {
             const domElement = document.querySelector(`[data-element-id='${id}']`) as HTMLElement;
             if (domElement) {
-                domElement.style.transform = transform;
+                domElement.style.transform = newTransform;
             }
         });
-        
+
         const trackElements = Array.from(document.querySelectorAll('[data-track-id]'));
         const targetTrack = trackElements.find(el => {
             const rect = el.getBoundingClientRect();
@@ -171,37 +225,69 @@ export function useTimelineElement<T extends ElementType>({
             const distX = drag.dist[0];
             newLeft = startLeft + distX;
             newWidth = startWidth - distX;
+        } else { // right resize
+            newLeft = startLeft;
+            newWidth = startWidth + dist[0];
+        }
 
-            if (isMedia) {
+        if (isSnappingEnabled) {
+            const otherElements = allElements.filter(el => el.id !== clip.id);
+            const elementSnapPoints = otherElements.flatMap(el => [el.positionStart, el.positionEnd]);
+            const markerSnapPoint = [currentTime];
+            const snapPoints = [...elementSnapPoints, ...markerSnapPoint];
+
+            let snapDelta = 0;
+
+            if (direction[0] === -1) { // left resize
+                const currentStart = newLeft / timelineZoom;
+                for (const point of snapPoints) {
+                    const diff = Math.abs(currentStart - point) * timelineZoom;
+                    if (diff < SNAP_THRESHOLD_PX) {
+                        snapDelta = (point - currentStart) * timelineZoom;
+                        break;
+                    }
+                }
+                if (snapDelta !== 0) {
+                    newLeft += snapDelta;
+                    newWidth -= snapDelta;
+                }
+            } else { // right resize
+                const currentEnd = (newLeft + newWidth) / timelineZoom;
+                for (const point of snapPoints) {
+                    const diff = Math.abs(currentEnd - point) * timelineZoom;
+                    if (diff < SNAP_THRESHOLD_PX) {
+                        snapDelta = (point - currentEnd) * timelineZoom;
+                        break;
+                    }
+                }
+                if (snapDelta !== 0) {
+                    newWidth += snapDelta;
+                }
+            }
+        }
+
+        if (isMedia) {
+            if (direction[0] === -1) {
                 const mediaClip = originalClip as MediaFile;
-                // Maximum width is current width + available media at the start
                 const maxTimelineWidth = startWidth + (mediaClip.startTime * timelineZoom);
-                
                 if (newWidth >= maxTimelineWidth) {
                     currentIsAtLimit = 'left';
                     newWidth = maxTimelineWidth;
                     newLeft = startLeft + startWidth - newWidth;
                 }
-            }
-            if (newLeft < 0) {
-                newWidth += newLeft;
-                newLeft = 0;
-            }
-
-        } else { // right resize
-            newLeft = startLeft;
-            newWidth = startWidth + dist[0];
-
-            if (isMedia) {
+            } else {
                 const mediaClip = originalClip as MediaFile;
-                // Maximum width is current width + available media at the end
                 const maxTimelineWidth = startWidth + (mediaClip.sourceDuration - mediaClip.endTime) * timelineZoom;
-
                 if (newWidth >= maxTimelineWidth) {
                     currentIsAtLimit = 'right';
                     newWidth = maxTimelineWidth;
                 }
             }
+        }
+
+        if (newLeft < 0) {
+            newWidth += newLeft;
+            newLeft = 0;
         }
 
         if (newWidth < MIN_DURATION * timelineZoom) {

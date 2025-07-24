@@ -121,7 +121,10 @@ export const SequenceItem: Record<
                     left: item.x,
                     color: item.color || "#000000",
                     // backgroundColor: item.backgroundColor || "transparent",
-                    opacity: item.opacity! / 100,
+                    opacity:
+                            item?.opacity !== undefined
+                                ? item.opacity / 100
+                                : 1,
                     fontFamily: item.fontFamily || "Arial",
                 }}
             >
