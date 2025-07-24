@@ -180,7 +180,7 @@ export default function TextTimeline({ trackId, trackIndex, totalTracks }: { tra
     }, [timelineZoom, textElements]);
 
     return (
-        <div className="relative h-full">
+        <div className="relative h-full w-full">
             {gaps.map((gap, index) => (
                 <div
                     key={`gap-text-${index}`}

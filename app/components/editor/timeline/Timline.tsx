@@ -36,6 +36,8 @@ export const Timeline = () => {
 
     const animationFrameRef = useRef<number | null>(null);
 
+    const timelineContainerWidth = useMemo(() => Math.max(duration, 60) * timelineZoom, [duration, timelineZoom]);
+
     const throttledZoom = useMemo(() =>
         throttle((value: number) => {
             dispatch(setTimelineZoom(value));
@@ -548,19 +550,19 @@ export const Timeline = () => {
                     className="relative overflow-x-auto w-full bg-[#1E1D21] z-10"
                     ref={timelineRef}
                 >
-                    <div 
-                        onMouseDown={handleDragStart} 
+                    <div
                         onClick={(e) => {
                             if (e.target === e.currentTarget) {
                                 handleTimelineClick(e);
                             }
                         }}
                         className="h-10 border-b border-gray-800"
+                        style={{ width: `${timelineContainerWidth}px` }}
                     >
-                        <Header />
+                        <Header onDragStart={handleDragStart} />
                     </div>
 
-                    <div className="bg-[#1E1D21]" style={{ width: "100%" }}>
+                    <div className="bg-[#1E1D21]" style={{ width: `${timelineContainerWidth}px` }}>
                         <div
                             className={`absolute top-0 bottom-0 w-[2px] z-50 cursor-ew-resize bg-red-500`}
                             style={{

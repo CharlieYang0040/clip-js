@@ -183,7 +183,7 @@ export default function AudioTimeline({ trackId, trackIndex, totalTracks }: { tr
     }, [timelineZoom, mediaFiles]);
 
     return (
-        <div className="relative h-full">
+        <div className="relative h-full w-full">
             {gaps.map((gap, index) => (
                 <div
                     key={`gap-audio-${index}`}
