@@ -24,6 +24,7 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg }: FileU
     const [showModal, setShowModal] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [isRendering, setIsRendering] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
     const [showLogs, setShowLogs] = useState(false);
 
@@ -34,16 +35,23 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg }: FileU
     }, [loaded, previewUrl]);
 
     const handleCloseModal = async () => {
+        if (isRendering) {
+            setIsCancelling(true);
+            try {
+                await ffmpeg.terminate();
+                await loadFunction(); 
+                toast.success('Rendering cancelled.');
+            } catch (e) {
+                console.error("Error during cancellation:", e);
+                toast.error('Could not cancel rendering properly.');
+            } finally {
+                setIsCancelling(false);
+            }
+        }
         setShowModal(false);
         setIsRendering(false);
         setLogs([]);
         setShowLogs(false);
-        try {
-            ffmpeg.terminate();
-            await loadFunction();
-        } catch (e) {
-            console.error("Failed to reset FFmpeg:", e);
-        }
     };
 
     const render = async () => {
@@ -239,7 +247,7 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg }: FileU
             <button
                 onClick={() => render()}
                 className={`inline-flex items-center p-3 bg-white hover:bg-[#ccc] rounded-lg disabled:opacity-50 text-gray-900 font-bold transition-all transform`}
-                disabled={(!loadFfmpeg || isRendering || (mediaFiles.length === 0 && textElements.length === 0))}
+                disabled={!loadFfmpeg || isRendering || isCancelling || (mediaFiles.length === 0 && textElements.length === 0)}
             >
                 {(!loadFfmpeg || isRendering) && <span className="animate-spin mr-2">
                     <svg
@@ -285,7 +293,10 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg }: FileU
                                             className="w-full h-40 bg-gray-900 text-white p-2 rounded-md font-mono text-xs"
                                         />
                                         <button 
-                                            onClick={() => navigator.clipboard.writeText(logs.join('\n'))}
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(logs.join('\n'));
+                                                toast.success('Logs copied to clipboard');
+                                            }}
                                             className="bg-blue-500 text-white px-2 py-1 rounded-md mt-2 hover:bg-blue-600"
                                         >
                                             Copy Logs
