@@ -13,16 +13,19 @@ interface FileUploaderProps {
     loadFunction: () => Promise<void>;
     loadFfmpeg: boolean;
     ffmpeg: FFmpeg;
-    logMessages: string;
 }
-export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMessages }: FileUploaderProps) {
-    const { mediaFiles, projectName, exportSettings, duration, textElements } = useAppSelector(state => state.projectState);
+
+export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg }: FileUploaderProps) {
+    const projectState = useAppSelector(state => state.projectState);
+    const { mediaFiles, projectName, exportSettings, duration, textElements, tracks } = projectState;
     const totalDuration = duration;
     const videoRef = useRef<HTMLVideoElement>(null);
     const [loaded, setLoaded] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [isRendering, setIsRendering] = useState(false);
+    const [logs, setLogs] = useState<string[]>([]);
+    const [showLogs, setShowLogs] = useState(false);
 
     useEffect(() => {
         if (loaded && videoRef.current && previewUrl) {
@@ -33,6 +36,8 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
     const handleCloseModal = async () => {
         setShowModal(false);
         setIsRendering(false);
+        setLogs([]);
+        setShowLogs(false);
         try {
             ffmpeg.terminate();
             await loadFunction();
@@ -48,9 +53,10 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
         }
         setShowModal(true);
         setIsRendering(true);
+        setLogs([]);
 
-        const renderFunction = async () => {
-            const params = extractConfigs(exportSettings);
+        const renderFunction = async (state: typeof projectState) => {
+            const params = extractConfigs(state.exportSettings);
 
             try {
                 const filters = [];
@@ -58,30 +64,25 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
                 const inputs = [];
                 const audioDelays = [];
 
-                // Create base black background
-                filters.push(`color=c=black:size=1920x1080:d=${totalDuration.toFixed(3)}[base]`);
-
-                const { tracks } = useAppSelector(state => state.projectState);
+                filters.push(`color=c=black:size=1920x1080:d=${state.duration.toFixed(3)}[base]`);
 
                 const allElements = [
-                    ...mediaFiles.map(item => ({ ...item, elementType: item.type })),
-                    ...textElements.map(item => ({ ...item, elementType: 'text' as const }))
+                    ...state.mediaFiles.map(item => ({ ...item, elementType: item.type })),
+                    ...state.textElements.map(item => ({ ...item, elementType: 'text' as const }))
                 ];
 
                 const sortedElements = allElements.map(item => {
-                    const trackIndex = tracks.findIndex(t => t.id === item.trackId);
-                    const totalTracks = tracks.length;
+                    const trackIndex = state.tracks.findIndex(t => t.id === item.trackId);
+                    const totalTracks = state.tracks.length;
                     const baseZIndex = (totalTracks - trackIndex - 1) * 10;
                     const finalZIndex = baseZIndex + (item.layerOrder || 0);
                     return { ...item, zIndex: finalZIndex };
                 }).sort((a, b) => a.zIndex - b.zIndex);
 
-
                 for (let i = 0; i < sortedElements.length; i++) {
                     const element = sortedElements[i];
 
                     if (element.elementType === 'video' || element.elementType === 'image' || element.elementType === 'audio') {
-                        // Media file processing
                         const { startTime, positionStart, positionEnd } = element;
                         const duration = positionEnd - positionStart;
 
@@ -99,14 +100,17 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
                         const visualLabel = `visual${i}`;
                         const audioLabel = `audio${i}`;
 
+                        const width = element.width || 1920;
+                        const height = element.height || 1080;
+
                         if (element.type === 'video') {
                             filters.push(
-                                `[${i}:v]trim=start=${startTime.toFixed(3)}:duration=${duration.toFixed(3)},scale=${element.width}:${element.height},setpts=PTS-STARTPTS+${positionStart.toFixed(3)}/TB[${visualLabel}]`
+                                `[${i}:v]trim=start=${startTime.toFixed(3)}:duration=${duration.toFixed(3)},scale=${width}:${height},setpts=PTS-STARTPTS+${positionStart.toFixed(3)}/TB[${visualLabel}]`
                             );
                         }
                         if (element.type === 'image') {
                             filters.push(
-                                `[${i}:v]scale=${element.width}:${element.height},setpts=PTS+${positionStart.toFixed(3)}/TB[${visualLabel}]`
+                                `[${i}:v]scale=${width}:${height},setpts=PTS+${positionStart.toFixed(3)}/TB[${visualLabel}]`
                             );
                         }
 
@@ -124,7 +128,7 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
                             });
                         }
 
-                        if (element.type === 'audio' || element.type === 'video') {
+                        if (element.type === 'audio') {
                             const delayMs = Math.round(positionStart * 1000);
                             const volume = element.volume !== undefined ? element.volume / 100 : 1;
                             filters.push(
@@ -141,7 +145,7 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
                         const { label, start, end, x, y } = overlays[i];
                         const nextLabel = `tmp${i}`;
                         filters.push(
-                            `[${lastLabel}][${label}]overlay=${x}:${y}:enable='between(t\\,${start}\\,${end})'[${nextLabel}]`
+                            `[${lastLabel}][${label}]overlay=${x}:${y}:enable='between(t\,${start}\,${end})'[${nextLabel}]`
                         );
                         lastLabel = nextLabel;
                     }
@@ -149,7 +153,6 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
 
                 const textElementsToRender = sortedElements.filter(el => el.elementType === 'text');
                 if (textElementsToRender.length > 0) {
-                     // load fonts
                      let fonts = ['Arial', 'Inter', 'Lato'];
                      for (let i = 0; i < fonts.length; i++) {
                          const font = fonts[i];
@@ -159,34 +162,28 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
                      }
                     for (let i = 0; i < textElementsToRender.length; i++) {
                         const text = textElementsToRender[i] as TextElement;
-                        const label = i === textElementsToRender.length - 1 ? 'outv' : `text${i}`;
-                        const escapedText = text.content.replace(/:/g, '\\:').replace(/'/g, "\\\\'");
+                        const label = `text${i}`;
+                        const escapedText = text.content.replace(/:/g, '\:').replace(/'/g, "\\'");
                         const alpha = Math.min(Math.max((text.opacity ?? 100) / 100, 0), 1);
                         const color = text.color?.includes('@') ? text.color : `${text.color || 'white'}@${alpha}`;
                         filters.push(
-                            `[${lastLabel}]drawtext=fontfile=font${text.fontFamily}.ttf:text='${escapedText}':x=${text.x}:y=${text.y}:fontsize=${text.fontSize || 24}:fontcolor=${color}:enable='between(t\\,${text.positionStart}\\,${text.positionEnd})'[${label}]`
+                            `[${lastLabel}]drawtext=fontfile=font${text.fontFamily}.ttf:text='${escapedText}':x=${text.x}:y=${text.y}:fontsize=${text.fontSize || 24}:fontcolor=${color}:enable='between(t\,${text.positionStart}\,${text.positionEnd})'[${label}]`
                         );
                         lastLabel = label;
                     }
                 }
                 
-                if (overlays.length === 0 && textElementsToRender.length > 0) {
-                    filters.push(`[${lastLabel}]copy[outv]`);
-                } else if (overlays.length > 0) {
-                    const finalOutputLabel = textElementsToRender.length > 0 ? `text${textElementsToRender.length - 1}` : `tmp${overlays.length - 1}`;
-                    filters.push(`[${finalOutputLabel}]copy[outv]`);
-                } else {
+                if (overlays.length === 0 && textElementsToRender.length === 0) {
                     filters.push(`[base]copy[outv]`);
+                } else {
+                    filters.push(`[${lastLabel}]copy[outv]`);
                 }
 
-
-                // Mix all audio tracks
                 if (audioDelays.length > 0) {
                     const audioMix = audioDelays.join('');
                     filters.push(`${audioMix}amix=inputs=${audioDelays.length}:normalize=0[outa]`);
                 }
 
-                // Final filter_complex
                 const complexFilter = filters.join('; ');
                 const ffmpegArgs = [
                     ...inputs,
@@ -203,26 +200,29 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
                     '-c:a', 'aac',
                     '-preset', params.preset,
                     '-crf', params.crf.toString(),
-                    '-t', totalDuration.toFixed(3),
+                    '-t', state.duration.toFixed(3),
                     'output.mp4'
                 );
+
+                ffmpeg.on('log', (log) => {
+                    setLogs(prev => [...prev, log.message]);
+                });
 
                 await ffmpeg.exec(ffmpegArgs);
 
             } catch (err) {
                 console.error('FFmpeg processing error:', err);
+                setLogs(prev => [...prev, `Error: ${err}`]);
             }
 
-            // return the output url
             const outputData = await ffmpeg.readFile('output.mp4');
             const outputBlob = new Blob([outputData as Uint8Array], { type: 'video/mp4' });
             const outputUrl = URL.createObjectURL(outputBlob);
             return outputUrl;
         };
 
-        // Run the function and handle the result/error
         try {
-            const outputUrl = await renderFunction();
+            const outputUrl = await renderFunction(projectState);
             setPreviewUrl(outputUrl);
             setLoaded(true);
             setIsRendering(false);
@@ -230,12 +230,12 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
         } catch (err) {
             toast.error('Failed to render video');
             console.error("Failed to render video:", err);
+            setLogs(prev => [...prev, `Error: ${err}`]);
         }
     };
 
     return (
         <>
-            {/* Render Button */}
             <button
                 onClick={() => render()}
                 className={`inline-flex items-center p-3 bg-white hover:bg-[#ccc] rounded-lg disabled:opacity-50 text-gray-900 font-bold transition-all transform`}
@@ -255,11 +255,9 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
                 <p>{loadFfmpeg ? (isRendering ? 'Rendering...' : 'Render') : 'Loading FFmpeg...'}</p>
             </button>
 
-            {/* Render Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
                     <div className="bg-black rounded-xl shadow-lg p-6 max-w-xl w-full">
-                        {/* Title and close button */}
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-semibold">
                                 {isRendering ? 'Rendering...' : `${projectName}`}
@@ -275,11 +273,25 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
 
                         {isRendering ? (
                             <div>
-                                <div className="bg-black p-2 h-40 text-sm font-mono rounded">
-                                    <div>{logMessages}</div>
-                                    <p className="text-xs text-gray-400 italic">The progress bar is experimental in FFmpeg WASM, so it might appear slow or unresponsive even though the actual processing is not.</p>
-                                    <FfmpegProgressBar ffmpeg={ffmpeg} />
-                                </div>
+                                <FfmpegProgressBar ffmpeg={ffmpeg} />
+                                <button onClick={() => setShowLogs(!showLogs)} className="text-sm text-blue-400 hover:underline mt-2">
+                                    {showLogs ? 'Hide Logs' : 'Show Logs'}
+                                </button>
+                                {showLogs && (
+                                    <div className="mt-2">
+                                        <textarea
+                                            readOnly
+                                            value={logs.join('\n')}
+                                            className="w-full h-40 bg-gray-900 text-white p-2 rounded-md font-mono text-xs"
+                                        />
+                                        <button 
+                                            onClick={() => navigator.clipboard.writeText(logs.join('\n'))}
+                                            className="bg-blue-500 text-white px-2 py-1 rounded-md mt-2 hover:bg-blue-600"
+                                        >
+                                            Copy Logs
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div>
@@ -316,7 +328,6 @@ export default function FfmpegRender({ loadFunction, loadFfmpeg, ffmpeg, logMess
                     </div>
                 </div>
             )}
-
         </>
     )
 }
