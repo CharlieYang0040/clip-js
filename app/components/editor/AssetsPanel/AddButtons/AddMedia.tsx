@@ -113,7 +113,7 @@ export default function AddMedia({ fileId }: { fileId: string }) {
                     className="Black"
                     height={12}
                     width={12}
-                    src="https://www.svgrepo.com/show/513803/add.svg"
+                    src="/icons/add.svg"
                 />
                 <button
                     onClick={handleFileChange}

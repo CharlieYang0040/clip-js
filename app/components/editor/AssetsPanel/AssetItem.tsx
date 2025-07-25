@@ -46,7 +46,7 @@ export default function AssetItem({ fileId }: { fileId: string }) {
                         thumb = await createVideoThumbnail(objectUrl);
                         dur = await getMediaDuration(objectUrl, 'video');
                     } else if (type === 'audio') {
-                        thumb = "https://www.svgrepo.com/show/532708/music.svg"; // Default audio icon
+                        thumb = "/icons/music.svg"; // Default audio icon
                         dur = await getMediaDuration(objectUrl, 'audio');
                     } else if (type === 'image') {
                         thumb = objectUrl;

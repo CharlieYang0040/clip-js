@@ -12,7 +12,7 @@ export default function ShortcutsButton({ onClick }: { onClick: () => void }) {
                 className="h-auto w-auto max-w-[30px] max-h-[30px]"
                 height={30}
                 width={30}
-                src="https://www.svgrepo.com/show/501605/keyboard-shortcuts.svg"
+                src="/icons/keyboard-shortcuts.svg"
             />
             <span className="text-xs">Shortcuts</span>
         </button>

@@ -169,7 +169,7 @@ export const PreviewPlayer = () => {
              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                 <div className="flex items-center gap-4 text-white">
                     <button onClick={handlePlayPauseClick} className="p-1">
-                        <Image src={isPlaying ? "https://www.svgrepo.com/show/521782/pause.svg" : "https://www.svgrepo.com/show/521789/play.svg"} alt="Play/Pause" width={20} height={20} className="invert" />
+                        <Image src={isPlaying ? "/icons/pause.svg" : "/icons/play.svg"} alt="Play/Pause" width={20} height={20} className="invert" />
                     </button>
                     <div className="flex-grow">
                         <div
@@ -188,10 +188,10 @@ export const PreviewPlayer = () => {
                     </div>
                     <div className="text-xs font-mono">{formatTime(displayTime)} / {formatTime(duration)}</div>
                     <button onClick={handleMuteToggle} className="p-1">
-                        <Image src={isMuted ? "https://www.svgrepo.com/show/513865/volume-off.svg" : "https://www.svgrepo.com/show/502909/volume-up.svg"} alt="Mute/Unmute" width={20} height={20} className="invert" />
+                        <Image src={isMuted ? "/icons/volume-off.svg" : "/icons/volume-up.svg"} alt="Mute/Unmute" width={20} height={20} className="invert" />
                     </button>
                     <button onClick={handleFullscreenToggle} className="p-1">
-                        <Image src={isFullScreen ? "https://www.svgrepo.com/show/491410/fullscreen-exit.svg" : "https://www.svgrepo.com/show/491638/fullscreen-alt.svg"} alt="Fullscreen" width={20} height={20} className="invert" />
+                        <Image src={isFullScreen ? "/icons/fullscreen-exit.svg" : "/icons/fullscreen-alt.svg"} alt="Fullscreen" width={20} height={20} className="invert" />
                     </button>
                 </div>
             </div>

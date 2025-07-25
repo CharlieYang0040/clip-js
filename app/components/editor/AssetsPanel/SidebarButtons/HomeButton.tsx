@@ -15,7 +15,7 @@ export default function HomeButton() {
                 className="h-auto w-auto max-w-[30px] max-h-[30px]"
                 height={30}
                 width={30}
-                src="https://www.svgrepo.com/show/535437/home.svg"
+                src="/icons/home.svg"
             />
             <span className="text-xs">Home</span>
         </button>

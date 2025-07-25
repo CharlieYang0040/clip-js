@@ -91,7 +91,7 @@ const AudioClipItem = memo(({
                     className="h-7 w-7 min-w-6 mr-2 flex-shrink-0"
                     height={30}
                     width={30}
-                    src="https://www.svgrepo.com/show/532708/music.svg"
+                    src="/icons/music.svg"
                 />
                 <span className="truncate text-x">{clip.fileName}</span>
             </div>

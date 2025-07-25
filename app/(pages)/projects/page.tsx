@@ -120,7 +120,7 @@ export default function Projects() {
                                                     alt="Add Project"
                                                     className="invert"
                                                     height={18}
-                                                    src="https://www.svgrepo.com/show/421119/add-create-new.svg"
+                                                    src="/icons/add-create-new.svg"
                                                     width={18}
                                                 />
                                             </div>
@@ -147,7 +147,7 @@ export default function Projects() {
                                                                 alt={projectName}
                                                                 className="invert"
                                                                 height={18}
-                                                                src="https://www.svgrepo.com/show/522461/video.svg"
+                                                                src="/icons/video.svg"
                                                                 width={18}
                                                             />
                                                         </div>

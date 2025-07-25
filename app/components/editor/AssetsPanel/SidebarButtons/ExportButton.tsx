@@ -12,7 +12,7 @@ export default function ExportButton({ onClick }: { onClick: () => void }) {
                 className="h-auto w-auto max-w-[30px] max-h-[30px]"
                 height={30}
                 width={30}
-                src="https://www.svgrepo.com/show/486665/export.svg"
+                src="/icons/export.svg"
             />
             <span className="text-xs">Export</span>
         </button>

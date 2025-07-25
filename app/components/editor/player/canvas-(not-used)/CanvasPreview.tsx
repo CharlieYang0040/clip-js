@@ -632,14 +632,14 @@ export default function CanvasPreview() {
                     onClick={toggleMute}
                     className="bg-white hover:bg-gray-200 text-black py-1 px-3 rounded"
                 >
-                    <img src={isMuted ? 'https://www.svgrepo.com/show/391332/sound-mute.svg' : 'https://www.svgrepo.com/show/391335/sound-up.svg'} alt="Mute" width={24} height={24} />
+                    <img src={isMuted ? '/icons/sound-mute.svg' : '/icons/sound-up.svg'} alt="Mute" width={24} height={24} />
                 </button>
                 {/* <GlobalKeyHandlerProps onSpace={togglePlay} onMute={toggleMute} /> */}
                 <button
                     onClick={togglePlay}
                     className="bg-white hover:bg-gray-200 text-black py-1 px-3 rounded"
                 >
-                    <img src={isPlaying ? 'https://www.svgrepo.com/show/512674/play-1003.svg' : 'https://www.svgrepo.com/show/535553/pause.svg'} alt="Play" width={24} height={24} />
+                    <img src={isPlaying ? '/icons/play-1003.svg' : '/icons/pause.svg'} alt="Play" width={24} height={24} />
                 </button>
             </div>
 

@@ -11,7 +11,7 @@ export default function LibraryButton({ onClick }: { onClick: () => void }) {
                 className="h-auto w-auto max-w-[30px] max-h-[30px]"
                 height={30}
                 width={30}
-                src="https://www.svgrepo.com/show/514275/upload-cloud.svg"
+                src="/icons/upload-cloud.svg"
             />
             <span className="text-xs">Library</span>
         </button>

@@ -14,10 +14,10 @@ import toast from "react-hot-toast";
 import { MediaFile, TextElement, Track, TrackType } from "@/app/types";
 
 const trackTypeIcons = {
-    video: { src: "https://www.svgrepo.com/show/532727/video.svg", alt: "Video" },
-    audio: { src: "https://www.svgrepo.com/show/532708/music.svg", alt: "Audio" },
-    image: { src: "https://www.svgrepo.com/show/535454/image.svg", alt: "Image" },
-    text: { src: "https://www.svgrepo.com/show/535686/text.svg", alt: "Text" },
+    video: { src: "/icons/video.svg", alt: "Video" },
+    audio: { src: "/icons/music.svg", alt: "Audio" },
+    image: { src: "/icons/image.svg", alt: "Image" },
+    text: { src: "/icons/text.svg", alt: "Text" },
 };
 
 export const Timeline = () => {
@@ -404,7 +404,7 @@ export const Timeline = () => {
                             className="h-auto w-auto max-w-[20px] max-h-[20px]"
                             height={30}
                             width={30}
-                            src="https://www.svgrepo.com/show/509075/cut.svg"
+                            src="/icons/cut.svg"
                         />
                         <span className="ml-2 hidden sm:inline">Split <span className="text-xs">(S)</span></span>
                     </button>
@@ -418,7 +418,7 @@ export const Timeline = () => {
                             className="h-auto w-auto max-w-[20px] max-h-[20px]"
                             height={30}
                             width={30}
-                            src="https://www.svgrepo.com/show/521623/duplicate.svg"
+                            src="/icons/duplicate.svg"
                         />
                         <span className="ml-2 hidden sm:inline">Duplicate <span className="text-xs">(D)</span></span>
                     </button>
@@ -432,7 +432,7 @@ export const Timeline = () => {
                             className="h-auto w-auto max-w-[20px] max-h-[20px]"
                             height={30}
                             width={30}
-                            src="https://www.svgrepo.com/show/511788/delete-1487.svg"
+                            src="/icons/delete-1487.svg"
                         />
                         <span className="ml-2 hidden sm:inline">Delete <span className="text-xs">(Del)</span></span>
                     </button>
@@ -455,7 +455,7 @@ export const Timeline = () => {
                                 className="h-auto w-auto max-w-[20px] max-h-[20px]"
                                 height={30}
                                 width={30}
-                                src="https://www.svgrepo.com/show/447546/yes-alt.svg"
+                                src="/icons/yes-alt.svg"
                             />
                         </button>
                         <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap border border-gray-700">
@@ -477,7 +477,7 @@ export const Timeline = () => {
                                 className="h-auto w-auto max-w-[20px] max-h-[20px]"
                                 height={30}
                                 width={30}
-                                src="https://www.svgrepo.com/show/509160/magnet.svg"
+                                src="/icons/magnet.svg"
                             />
                         </button>
                         <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap border border-gray-700">

@@ -148,7 +148,7 @@ export default function AddMedia() {
                         className="Black"
                         height={12}
                         width={12}
-                        src="https://www.svgrepo.com/show/514275/upload-cloud.svg"
+                        src="/icons/upload-cloud.svg"
                     />
                     <span className="text-xs">Browse Files</span>
                 </label>
