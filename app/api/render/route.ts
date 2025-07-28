@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
                     filters.push(videoFilter);
                 }
 
-                if (element.type === 'audio' && element.volume > 0) {
+                if (element.type === 'audio' && typeof element.volume === 'number' && element.volume > 0) {
                     const delayMs = Math.round(positionStart * 1000);
                     const volume = element.volume !== undefined ? element.volume / 100 : 1;
                     filters.push(
