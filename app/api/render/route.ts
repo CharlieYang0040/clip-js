@@ -2,20 +2,30 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
-import fs from 'fs/promises';
+import fs from 'fs';
 import os from 'os';
 import { ProjectState } from '@/app/types';
 import { extractConfigs } from '@/app/utils/extractConfigs';
+import { randomUUID } from 'crypto';
+
+async function ensureDir(dirPath: string) {
+    try {
+        await fs.promises.access(dirPath);
+    } catch (e) {
+        await fs.promises.mkdir(dirPath, { recursive: true });
+    }
+}
 
 export async function POST(request: NextRequest) {
     try {
         const state: ProjectState = await request.json();
-        console.log('Received project state for rendering');
-
+        const renderId = randomUUID();
         const tempDir = path.join(process.cwd(), '.tmp');
-        await ensureDir(tempDir); // Ensure the .tmp directory exists
-        const outputFileName = `${state.projectName.replace(/\s+/g, '_') || 'output'}_${Date.now()}.mp4`;
+        await ensureDir(tempDir);
+
+        const outputFileName = `${renderId}.mp4`;
         const outputPath = path.join(tempDir, outputFileName);
+        const logPath = path.join(tempDir, `${renderId}.log`);
 
         const params = extractConfigs(state.exportSettings);
         const filters: string[] = [];
@@ -89,11 +99,10 @@ export async function POST(request: NextRequest) {
 
         state.textElements.forEach((text, index) => {
             const nextLabel = `tmp_text_${index}`;
-            const escapedText = text.content.replace(/:/g, '\\:').replace(/'/g, `'\''`);
+            const escapedText = text.content.replace(/:/g, '\:').replace(/'/g, `'\''`);
             const alpha = Math.min(Math.max((text.opacity ?? 100) / 100, 0), 1);
             const color = (text.color?.includes('@') ? text.color : `${text.color || 'white'}@${alpha}`).replace(/\s/g, '');
-            const rawPath = path.join(process.cwd(), 'public', 'fonts', `${text.fontFamily}.ttf`);
-            const fontPath = '\'' + rawPath.replace(/\\/g, '/').replace(/:/g, '\\:') + '\'';
+            const rawPath = path.join(process.cwd(), 'public', 'fonts', `${text.fontFamily}.ttf`);            const sanitizedPath = rawPath.replace(/\\/g, '/').replace(/^([A-Z]):/, '$1\\:');            const fontPath = `'${sanitizedPath}'`;
             filters.push(
                 `[${lastLabel}]drawtext=fontfile=${fontPath}:text='${escapedText}':x=${text.x}:y=${text.y}:fontsize=${text.fontSize || 24}:fontcolor=${color}:enable='between(t,${text.positionStart},${text.positionEnd})'[${nextLabel}]`
             );
@@ -114,7 +123,7 @@ export async function POST(request: NextRequest) {
         if (audioStreams.length > 0) {
             ffmpegArgs.push('-map', '[outa]');
         }
-
+        
         const nvencPresetMap = {
             fastest: 'p1',
             fast: 'p2',
@@ -133,28 +142,26 @@ export async function POST(request: NextRequest) {
             outputPath
         );
 
-        console.log('Executing FFmpeg with args:\n', ffmpegArgs.join(' '));
-
         const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
-        const ffmpegProcess = spawn(ffmpegPath, ffmpegArgs);
+        const logStream = fs.createWriteStream(logPath);
+        const ffmpegProcess = spawn(ffmpegPath, ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+        ffmpegProcess.stderr.pipe(logStream);
+        ffmpegProcess.stdout.pipe(logStream);
 
         ffmpegProcess.on('close', (code) => {
-            console.log(`FFmpeg process exited with code ${code}`);
-            if (code === 0) {
-                console.log(`Render finished: ${outputPath}`);
-                setTimeout(() => {
-                    fs.unlink(outputPath).catch(err => console.error(`Failed to delete temp file: ${err.message}`));
-                }, 600000); // 10 minutes
-            } else {
-                console.error('FFmpeg process failed.');
+            logStream.end();
+            if (code !== 0) {
+                fs.promises.writeFile(path.join(tempDir, `${renderId}.error`), `FFmpeg failed with code ${code}`).catch(() => {});
             }
+            setTimeout(() => {
+                fs.promises.unlink(outputPath).catch(() => {});
+                fs.promises.unlink(logPath).catch(() => {});
+                fs.promises.unlink(path.join(tempDir, `${renderId}.error`)).catch(() => {});
+            }, 600000);
         });
 
-        return NextResponse.json({ 
-            message: 'Render process started.',
-            previewUrl: `/api/download/${outputFileName}`,
-            downloadUrl: `/api/download/${outputFileName}`
-        }, { status: 202 });
+        return NextResponse.json({ renderId }, { status: 202 });
 
     } catch (error) {
         console.error('Error processing render request:', error);

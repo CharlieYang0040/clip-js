@@ -11,48 +11,52 @@ interface FfmpegRenderProps {}
 export default function FfmpegRender({}: FfmpegRenderProps) {
     const projectState = useAppSelector(state => state.projectState);
     const { mediaFiles, projectName, textElements } = projectState;
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const [loaded, setLoaded] = useState(false);
-    const [showModal, setShowModal] = useState(false);
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-    const [isRendering, setIsRendering] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
-    const [logs, setLogs] = useState<string[]>([]);
-    const [showLogs, setShowLogs] = useState(false);
     const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
+    const [renderId, setRenderId] = useState<string | null>(null);
+    const [status, setStatus] = useState('idle');
+    const [logs, setLogs] = useState('');
+    const [showLogs, setShowLogs] = useState(false);
+    const [finalUrl, setFinalUrl] = useState<string | null>(null);
+
     useEffect(() => {
-        if (previewUrl && videoRef.current) {
-            const videoElement = videoRef.current;
+        if (renderId && (status === 'starting' || status === 'processing')) {
+            pollingRef.current = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/status/${renderId}`);
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    
+                    setLogs(data.log || '');
+                    setStatus(data.status);
 
-            const handleCanPlay = () => {
-                setLoaded(true);
-                setIsRendering(false);
-                toast.dismiss();
-                toast.success('Render complete!');
-            };
-
-            videoElement.addEventListener('canplay', handleCanPlay);
-
-            // Start loading the video
-            videoElement.src = previewUrl;
+                    if (data.status === 'complete' || data.status === 'failed') {
+                        if (pollingRef.current) clearInterval(pollingRef.current);
+                        if (data.status === 'complete') {
+                            setFinalUrl(data.url);
+                            toast.success('Render Complete!');
+                        } else {
+                            toast.error('Render Failed. Check logs for details.');
+                        }
+                    }
+                } catch (error) {
+                    console.error("Status polling failed:", error);
+                    if (pollingRef.current) clearInterval(pollingRef.current);
+                }
+            }, 2000);
 
             return () => {
-                videoElement.removeEventListener('canplay', handleCanPlay);
+                if (pollingRef.current) clearInterval(pollingRef.current);
             };
         }
-    }, [previewUrl]);
+    }, [renderId, status]);
 
     const handleCloseModal = () => {
-        setShowModal(false);
-        setIsRendering(false);
-        setLoaded(false);
-        setPreviewUrl(null);
-        setLogs([]);
+        setRenderId(null);
+        setStatus('idle');
+        setLogs('');
+        setFinalUrl(null);
         setShowLogs(false);
-        if (pollingRef.current) {
-            clearInterval(pollingRef.current);
-        }
     };
 
     const render = async () => {
@@ -61,164 +65,105 @@ export default function FfmpegRender({}: FfmpegRenderProps) {
             return;
         }
         
-        setIsUploading(true);
-        setLogs([]);
+        setStatus('uploading');
         toast.loading('Uploading media files...');
 
         try {
             const uploadedMediaFiles = await Promise.all(
                 projectState.mediaFiles.map(async (mediaFile) => {
-                    const file = await getFile(mediaFile.url!); 
-                    if (!file) {
-                        throw new Error(`File not found for ${mediaFile.fileName}`);
-                    }
-
+                    const file = await getFile(mediaFile.url!);
+                    if (!file) throw new Error(`File not found for ${mediaFile.fileName}`);
                     const formData = new FormData();
                     formData.append('file', file);
-
-                    const response = await fetch('/api/v1/upload', {
-                        method: 'POST',
-                        body: formData,
-                    });
-
+                    const response = await fetch('/api/v1/upload', { method: 'POST', body: formData });
                     const result = await response.json();
-                    if (!response.ok) {
-                        throw new Error(result.message || 'File upload failed');
-                    }
+                    if (!response.ok) throw new Error(result.message || 'File upload failed');
                     return { ...mediaFile, url: result.filePath };
                 })
             );
             
             toast.dismiss();
-            toast.loading('Render process started on server...');
-            setIsUploading(false);
-            setIsRendering(true);
-            setShowModal(true);
-
-            const serverProjectState: ProjectState = {
-                ...projectState,
-                mediaFiles: uploadedMediaFiles,
-            };
+            toast.loading('Initializing render...');
+            const serverProjectState: ProjectState = { ...projectState, mediaFiles: uploadedMediaFiles };
 
             const response = await fetch('/api/render', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(serverProjectState),
             });
 
             const result = await response.json();
+            toast.dismiss();
 
             if (response.ok) {
-                setPreviewUrl(result.outputUrl);
-                // Polling will now be triggered by the useEffect
+                setRenderId(result.renderId);
+                setStatus('starting');
             } else {
-                throw new Error(result.message || 'Failed to start rendering.');
+                throw new Error(result.message || 'Failed to start render');
             }
-
         } catch (error) {
             toast.dismiss();
             toast.error(`Error: ${(error as Error).message}`);
-            console.error("Render process failed:", error);
-            setIsUploading(false);
-            setIsRendering(false);
-            setShowModal(false);
+            setStatus('idle');
         }
     };
 
-    const buttonText = () => {
-        if (isUploading) return 'Uploading...';
-        if (isRendering) return 'Rendering...';
+    const getButtonText = () => {
+        if (status === 'uploading') return 'Uploading...';
+        if (status === 'starting' || status === 'processing') return 'Rendering...';
         return 'Render Video';
-    }
+    };
 
     return (
         <>
-            <button
-                onClick={render}
-                className={`inline-flex items-center p-3 bg-white hover:bg-[#ccc] rounded-lg disabled:opacity-50 text-gray-900 font-bold transition-all transform`}
-                disabled={isUploading || isRendering || (mediaFiles.length === 0 && textElements.length === 0)}
-            >
-                {(isUploading || isRendering) && <span className="animate-spin mr-2">
-                    <svg
-                        viewBox="0 0 1024 1024"
-                        focusable="false"
-                        data-icon="loading"
-                        width="1em"
-                        height="1em"
-                    >
+            <button onClick={render} disabled={status !== 'idle'} className={`inline-flex items-center p-3 bg-white hover:bg-[#ccc] rounded-lg disabled:opacity-50 text-gray-900 font-bold transition-all transform`}>
+                {(status === 'uploading' || status === 'starting' || status === 'processing') && <span className="animate-spin mr-2">
+                    <svg viewBox="0 0 1024 1024" focusable="false" data-icon="loading" width="1em" height="1em">
                         <path d="M988 548c-19.9 0-36-16.1-36-36 0-59.4-11.6-117-34.6-171.3a440.45 440.45 0 00-94.3-139.9 437.71 437.71 0 00-139.9-94.3C629 83.6 571.4 72 512 72c-19.9 0-36-16.1-36-36s16.1-36 36-36c69.1 0 136.2 13.5 199.3 40.3C772.3 66 827 103 874 150c47 47 83.9 101.8 109.7 162.7 26.7 63.1 40.2 130.2 40.2 199.3.1 19.9-16 36-35.9 36z"></path>
                     </svg>
                 </span>}
-                <p>{buttonText()}</p>
+                <p>{getButtonText()}</p>
             </button>
 
-            {showModal && (
+            {status !== 'idle' && status !== 'uploading' && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-                    <div className="bg-black rounded-xl shadow-lg p-6 max-w-xl w-full">
+                    <div className="bg-black rounded-xl shadow-lg p-6 max-w-2xl w-full">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-semibold">
-                                {isRendering ? 'Rendering...' : (loaded ? 'Render Complete' : 'Starting Render...')}
+                                {status === 'complete' ? 'Render Complete' : (status === 'failed' ? 'Render Failed' : 'Rendering...')}
                             </h2>
-                            <button
-                                onClick={handleCloseModal}
-                                className="text-white text-4xl font-bold hover:text-red-400"
-                                aria-label="Close"
-                            >
+                            <button onClick={handleCloseModal} className="text-white text-4xl font-bold hover:text-red-400">
                                 &times;
                             </button>
                         </div>
 
-                        {!loaded ? (
+                        {status === 'complete' && finalUrl ? (
                             <div>
-                                <div className="w-full bg-gray-700 rounded-full h-4 mb-2">
-                                    <div className="bg-blue-600 h-4 rounded-full animate-pulse" style={{ width: `100%` }}></div>
-                                </div>
-                                <p className="text-center text-sm">Rendering is in progress on the server. This may take a moment...</p>
-                                <button onClick={() => setShowLogs(!showLogs)} className="text-sm text-blue-400 hover:underline mt-2">
-                                    {showLogs ? 'Hide Logs' : 'Show Logs'}
-                                </button>
-                                {showLogs && (
-                                    <div className="mt-2">
-                                        <textarea
-                                            readOnly
-                                            value={logs.join('\n')}
-                                            className="w-full h-40 bg-gray-900 text-white p-2 rounded-md font-mono text-xs"
-                                        />
-                                    </div>
-                                )}
+                                <video src={finalUrl} controls className="w-full mb-4" />
+                                <a href={finalUrl} download={`${projectName || 'render'}.mp4`} className={`inline-flex items-center p-3 bg-white hover:bg-[#ccc] rounded-lg text-gray-900 font-bold transition-all transform`}>
+                                    <Image alt='Download' className="Black" height={18} src={'https://www.svgrepo.com/show/501347/save.svg'} width={18} />
+                                    <span className="ml-2">Save Video</span>
+                                </a>
                             </div>
                         ) : (
                             <div>
-                                {previewUrl && (
-                                    <video ref={videoRef} src={previewUrl} controls className="w-full mb-4" />
-                                )}
-                                <div className="flex justify-between">
-                                    <a
-                                        href={previewUrl || '#'} // Use the same URL for download
-                                        download={`${projectName}.mp4`}
-                                        className={`inline-flex items-center p-3 bg-white hover:bg-[#ccc] rounded-lg text-gray-900 font-bold transition-all transform `}
-                                    >
-                                        <Image
-                                            alt='Download'
-                                            className="Black"
-                                            height={18}
-                                            src={'https://www.svgrepo.com/show/501347/save.svg'}
-                                            width={18}
-                                        />
-                                        <span className="ml-2">Save Video</span>
-                                    </a>
-                                    <a
-                                        href="https://github.com/sponsors/mohyware"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className={`inline-flex items-center p-3 bg-pink-600 hover:bg-pink-500 rounded-lg text-gray-900 font-bold transition-all transform`}
-                                    >
-                                        <Heart size={20} className="mr-2" />
-                                        Sponsor on Github
-                                    </a>
+                                <div className="w-full bg-gray-700 rounded-full h-4 mb-2 overflow-hidden">
+                                    <div className="bg-blue-600 h-4 w-full animate-pulse" />
                                 </div>
+                                <p className="text-center text-sm mb-2">Status: {status}</p>
+                                <div className="flex justify-between items-center mt-2">
+                                    <button onClick={() => setShowLogs(!showLogs)} className="text-sm text-blue-400 hover:underline">
+                                        {showLogs ? 'Hide Logs' : 'Show Logs'}
+                                    </button>
+                                    {showLogs && (
+                                        <button onClick={() => navigator.clipboard.writeText(logs)} className="text-sm text-gray-400 hover:text-white">
+                                            Copy
+                                        </button>
+                                    )}
+                                </div>
+                                {showLogs && (
+                                    <textarea readOnly value={logs} className="w-full h-60 mt-2 bg-gray-900 text-white p-2 rounded-md font-mono text-xs" />
+                                )}
                             </div>
                         )}
                     </div>
