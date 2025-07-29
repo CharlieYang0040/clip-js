@@ -3,10 +3,10 @@ import { TextElement, MediaFile, ActiveElement, ExportConfig, SelectedElement, T
 import { ProjectState } from '../../types';
 
 const createDefaultTracks = (): Track[] => [
-    { id: `track-video-${crypto.randomUUID()}`, type: 'video', name: 'Video 1', visible: true, locked: false },
-    { id: `track-audio-${crypto.randomUUID()}`, type: 'audio', name: 'Audio 1', visible: true, locked: false },
-    { id: `track-image-${crypto.randomUUID()}`, type: 'image', name: 'Image 1', visible: true, locked: false },
-    { id: `track-text-${crypto.randomUUID()}`, type: 'text', name: 'Text 1', visible: true, locked: false },
+    { id: `track-video-${crypto.randomUUID()}`, type: 'video', name: 'Video 1', visible: true, locked: false, isMuted: false, isSoloed: false },
+    { id: `track-audio-${crypto.randomUUID()}`, type: 'audio', name: 'Audio 1', visible: true, locked: false, isMuted: false, isSoloed: false },
+    { id: `track-image-${crypto.randomUUID()}`, type: 'image', name: 'Image 1', visible: true, locked: false, isMuted: false, isSoloed: false },
+    { id: `track-text-${crypto.randomUUID()}`, type: 'text', name: 'Text 1', visible: true, locked: false, isMuted: false, isSoloed: false },
 ];
 
 export const initialState: ProjectState = {
@@ -174,6 +174,8 @@ const projectStateSlice = createSlice({
                 name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${trackCount + 1}`,
                 visible: true,
                 locked: false,
+                isMuted: false,
+                isSoloed: false,
             };
             state.tracks.push(newTrack);
         },
@@ -195,6 +197,28 @@ const projectStateSlice = createSlice({
             if (draggingIndex > -1 && dropIndex > -1) {
                 const [draggedTrack] = state.tracks.splice(draggingIndex, 1);
                 state.tracks.splice(dropIndex, 0, draggedTrack);
+            }
+        },
+        toggleTrackMute: (state, action: PayloadAction<string>) => {
+            const track = state.tracks.find(t => t.id === action.payload);
+            if (track) {
+                track.isMuted = !track.isMuted;
+            }
+        },
+        toggleTrackSolo: (state, action: PayloadAction<string>) => {
+            const trackId = action.payload;
+            const track = state.tracks.find(t => t.id === trackId);
+            if (track) {
+                const newSoloState = !track.isSoloed;
+                track.isSoloed = newSoloState;
+                
+                if (newSoloState) {
+                    state.tracks.forEach(t => {
+                        if (t.type === track.type && t.id !== trackId) {
+                            t.isSoloed = false;
+                        }
+                    });
+                }
             }
         },
         
@@ -352,6 +376,8 @@ export const {
     reorderTracks,
     setDraggingElement,
     setDragOverTrackId,
+    toggleTrackMute,
+    toggleTrackSolo,
 } = projectStateSlice.actions;
 
 export default projectStateSlice.reducer; 

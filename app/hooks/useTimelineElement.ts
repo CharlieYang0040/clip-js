@@ -1,8 +1,9 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { useAppSelector, useAppDispatch } from '@/app/store';
-import { toggleActiveElement, setActiveElement, setMediaFiles, setTextElements, setDraggingElement, setDragOverTrackId } from '@/app/store/slices/projectSlice';
+import { toggleActiveElement, setActiveElement, setMediaFiles, setTextElements, setDraggingElement, setDragOverTrackId, setCurrentTime } from '@/app/store/slices/projectSlice';
 import { MediaFile, TextElement, SelectedElement } from '@/app/types';
 import { OnDrag, OnDragStart, OnResize, OnResizeStart, OnResizeEnd, OnDragEnd } from 'react-moveable';
+import { throttle } from 'lodash';
 
 const MIN_DURATION = 0.1;
 const SNAP_THRESHOLD_PX = 10; // Snap sensitivity in pixels
@@ -30,6 +31,16 @@ export function useTimelineElement<T extends ElementType>({
     const [isAtLimit, setIsAtLimit] = useState<'left' | 'right' | null>(null);
     const resizeStartStates = useRef<{ left: number, width: number } | null>(null);
     const metaKeyPressed = useRef(false);
+
+    const throttledSetMediaFiles = useCallback(throttle((files: MediaFile[]) => dispatch(setMediaFiles(files)), 50), [dispatch]);
+    const throttledSetTextElements = useCallback(throttle((elements: TextElement[]) => dispatch(setTextElements(elements)), 50), [dispatch]);
+
+    const throttledSetCurrentTime = useCallback(
+        throttle((time: number) => {
+            dispatch(setCurrentTime(time));
+        }, 100),
+        [dispatch]
+    );
 
     const isSelected = (clipId: string) => activeElements.some((el) => el.id === clipId);
 
@@ -75,64 +86,68 @@ export function useTimelineElement<T extends ElementType>({
     };
 
     const onDrag = (e: OnDrag) => {
-        const { transform, clientY, dist } = e;
-        let newTransform = transform;
+        const { clientY, dist } = e;
+        let snapDelta = 0;
 
         if (isSnappingEnabled) {
             const allElements = [...mediaFiles, ...textElements];
             const otherElements = allElements.filter(el => !dragStates[el.id]);
-            const currentElementDuration = clip.positionEnd - clip.positionStart;
+            
+            const sameTrackElements = otherElements.filter(el => el.trackId === clip.trackId);
+            const otherTrackElements = otherElements.filter(el => el.trackId !== clip.trackId);
 
-            const elementSnapPoints = otherElements.flatMap(el => [el.positionStart, el.positionEnd]);
+            const sameTrackSnapPoints = sameTrackElements.flatMap(el => [el.positionStart, el.positionEnd]);
             const markerSnapPoint = [currentTime];
+            const otherTrackSnapPoints = otherTrackElements.flatMap(el => [el.positionStart, el.positionEnd]);
 
+            const currentElementDuration = clip.positionEnd - clip.positionStart;
             const currentLeft = dragStates[clip.id].startLeft + dist[0];
             const currentStart = currentLeft / timelineZoom;
             const currentEnd = currentStart + currentElementDuration;
 
-            let snapDelta = 0;
-
-            // Priority 1: Snap to other elements
-            for (const point of elementSnapPoints) {
-                const startDiff = Math.abs(currentStart - point) * timelineZoom;
-                const endDiff = Math.abs(currentEnd - point) * timelineZoom;
-
-                if (startDiff < SNAP_THRESHOLD_PX) {
-                    snapDelta = (point - currentStart) * timelineZoom;
-                    break;
+            const findSnapDelta = (points: number[], start: number, end: number): number => {
+                for (const point of points) {
+                    const startDiff = Math.abs(start - point) * timelineZoom;
+                    if (startDiff < SNAP_THRESHOLD_PX) return (point - start) * timelineZoom;
+                    const endDiff = Math.abs(end - point) * timelineZoom;
+                    if (endDiff < SNAP_THRESHOLD_PX) return (point - end) * timelineZoom;
                 }
-                if (endDiff < SNAP_THRESHOLD_PX) {
-                    snapDelta = (point - currentEnd) * timelineZoom;
-                    break;
-                }
-            }
+                return 0;
+            };
 
-            // Priority 2: Snap to marker if no element snap
-            if (snapDelta === 0) {
-                for (const point of markerSnapPoint) {
-                    const startDiff = Math.abs(currentStart - point) * timelineZoom;
-                    const endDiff = Math.abs(currentEnd - point) * timelineZoom;
+            snapDelta = findSnapDelta(sameTrackSnapPoints, currentStart, currentEnd);
+            if (snapDelta === 0) snapDelta = findSnapDelta(markerSnapPoint, currentStart, currentEnd);
+            if (snapDelta === 0) snapDelta = findSnapDelta(otherTrackSnapPoints, currentStart, currentEnd);
+        }
+        
+        const deltaX = dist[0] + snapDelta;
+        const allElements = [...mediaFiles, ...textElements];
 
-                    if (startDiff < SNAP_THRESHOLD_PX) {
-                        snapDelta = (point - currentStart) * timelineZoom;
-                        break;
-                    }
-                    if (endDiff < SNAP_THRESHOLD_PX) {
-                        snapDelta = (point - currentEnd) * timelineZoom;
-                        break;
-                    }
-                }
-            }
+        const elementsToUpdate = Object.keys(dragStates).map(id => {
+            const el = allElements.find(e => e.id === id);
+            if (!el) return null;
+            const startLeft = dragStates[id].startLeft;
+            const newLeftPx = startLeft + deltaX;
+            const newPositionStart = Math.max(0, newLeftPx / timelineZoom);
+            const duration = el.positionEnd - el.positionStart;
+            return { ...el, positionStart: newPositionStart, positionEnd: newPositionStart + duration };
+        }).filter((u): u is MediaFile | TextElement => u !== null);
+        
+        const mediaToUpdate = elementsToUpdate.filter(el => 'type' in el && el.type !== 'text') as MediaFile[];
+        const textToUpdate = elementsToUpdate.filter(el => el.type === 'text') as TextElement[];
 
-            if (snapDelta !== 0) {
-                newTransform = `translate(${dist[0] + snapDelta}px, 0px)`;
-            }
+        if (mediaToUpdate.length > 0) {
+            throttledSetMediaFiles(mediaFiles.map(f => mediaToUpdate.find(u => u.id === f.id) || f));
+        }
+        if (textToUpdate.length > 0) {
+            throttledSetTextElements(textElements.map(t => textToUpdate.find(u => u.id === t.id) || t));
         }
 
+        const deltaY = dist[1];
         Object.keys(dragStates).forEach(id => {
             const domElement = document.querySelector(`[data-element-id='${id}']`) as HTMLElement;
             if (domElement) {
-                domElement.style.transform = newTransform;
+                domElement.style.transform = `translateY(${deltaY}px)`;
             }
         });
 
@@ -150,6 +165,16 @@ export function useTimelineElement<T extends ElementType>({
     };
 
     const onDragEnd = (e: OnDragEnd) => {
+        throttledSetMediaFiles.cancel();
+        throttledSetTextElements.cancel();
+
+        Object.keys(dragStates).forEach(id => {
+            const domElement = document.querySelector(`[data-element-id='${id}']`) as HTMLElement;
+            if (domElement) {
+                domElement.style.transform = 'none';
+            }
+        });
+        
         const dragDistance = e.isDrag && e.lastEvent ? Math.hypot(e.lastEvent.dist[0], e.lastEvent.dist[1]) : 0;
 
         if (!e.isDrag || dragDistance < 5) {
@@ -157,214 +182,119 @@ export function useTimelineElement<T extends ElementType>({
                 element: { id: clip.id, type: elementType },
                 metaKey: metaKeyPressed.current
             }));
-        } else if (dragOverTrackId) {
-            const targetTrack = tracks.find(t => t.id === dragOverTrackId);
-            const clipType = elementType === 'media' ? (clip as MediaFile).type : 'text';
+        } else {
+            const allElements = [...mediaFiles, ...textElements];
+            let snapDelta = 0;
 
-            if (targetTrack && targetTrack.type === clipType) {
-                const domElement = document.querySelector(`[data-element-id='${clip.id}']`) as HTMLElement;
-                if (domElement) {
-                    const transform = new DOMMatrix(getComputedStyle(domElement).transform);
-                    const newLeft = domElement.offsetLeft + transform.m41;
-                    const newPositionStart = newLeft / timelineZoom;
-                    const duration = clip.positionEnd - clip.positionStart;
+            if (isSnappingEnabled && e.lastEvent) {
+                const { dist } = e.lastEvent;
+                const sameTrackElements = allElements.filter(el => !dragStates[el.id] && el.trackId === clip.trackId);
+                const otherTrackElements = allElements.filter(el => !dragStates[el.id] && el.trackId !== clip.trackId);
+                const sameTrackSnapPoints = sameTrackElements.flatMap(el => [el.positionStart, el.positionEnd]);
+                const markerSnapPoint = [currentTime];
+                const otherTrackSnapPoints = otherTrackElements.flatMap(el => [el.positionStart, el.positionEnd]);
+                const currentElementDuration = clip.positionEnd - clip.positionStart;
+                const currentLeft = dragStates[clip.id].startLeft + dist[0];
+                const currentStart = currentLeft / timelineZoom;
+                const currentEnd = currentStart + currentElementDuration;
 
-                    const updateData = {
-                        trackId: dragOverTrackId,
-                        positionStart: newPositionStart,
-                        positionEnd: newPositionStart + duration,
-                    };
-
-                    if (elementType === 'media') {
-                        dispatch(setMediaFiles(mediaFiles.map(f => f.id === clip.id ? { ...f, ...updateData } : f)));
-                    } else {
-                        dispatch(setTextElements(textElements.map(t => t.id === clip.id ? { ...t, ...updateData } : t)));
+                const findSnapDelta = (points: number[], start: number, end: number): number => {
+                    for (const point of points) {
+                        const startDiff = Math.abs(start - point) * timelineZoom;
+                        if (startDiff < SNAP_THRESHOLD_PX) return (point - start) * timelineZoom;
+                        const endDiff = Math.abs(end - point) * timelineZoom;
+                        if (endDiff < SNAP_THRESHOLD_PX) return (point - end) * timelineZoom;
                     }
-                }
+                    return 0;
+                };
+
+                snapDelta = findSnapDelta(sameTrackSnapPoints, currentStart, currentEnd);
+                if (snapDelta === 0) snapDelta = findSnapDelta(markerSnapPoint, currentStart, currentEnd);
+                if (snapDelta === 0) snapDelta = findSnapDelta(otherTrackSnapPoints, currentStart, currentEnd);
             }
+
+            const deltaX = (e.lastEvent?.dist[0] || 0) + snapDelta;
+
+            const elementsToUpdate = Object.keys(dragStates).map(id => {
+                const el = allElements.find(e => e.id === id);
+                if (!el) return null;
+                const startLeft = dragStates[id].startLeft;
+                const newLeftPx = startLeft + deltaX;
+                const newPositionStart = Math.max(0, newLeftPx / timelineZoom);
+                const duration = el.positionEnd - el.positionStart;
+                const newTrackId = (dragOverTrackId && tracks.find(t => t.id === dragOverTrackId)?.type === ('type' in el ? el.type : 'text')) ? dragOverTrackId : el.trackId;
+                return { ...el, positionStart: newPositionStart, positionEnd: newPositionStart + duration, trackId: newTrackId };
+            }).filter((u): u is MediaFile | TextElement => u !== null);
+
+            const mediaToUpdate = elementsToUpdate.filter(el => el.type !== 'text') as MediaFile[];
+            const textToUpdate = elementsToUpdate.filter(el => el.type === 'text') as TextElement[];
+
+            if (mediaToUpdate.length > 0) dispatch(setMediaFiles(mediaFiles.map(f => mediaToUpdate.find(u => u.id === f.id) || f)));
+            if (textToUpdate.length > 0) dispatch(setTextElements(textElements.map(t => textToUpdate.find(u => u.id === t.id) || t)));
         }
         
-        // Reset transform and drag states
-        Object.keys(dragStates).forEach(id => {
-            const domElement = document.querySelector(`[data-element-id='${id}']`) as HTMLElement;
-            if (domElement) domElement.style.transform = 'none';
-        });
         setDragStates({});
         dispatch(setDraggingElement(null));
         dispatch(setDragOverTrackId(null));
     };
 
     const onResizeStart = (e: OnResizeStart) => {
-        const { target, clientX, clientY } = e;
-        if (!isSelected(clip.id)) {
-            dispatch(toggleActiveElement({ element: { id: clip.id, type: elementType }, metaKey: false }));
-        }
-        const htmlTarget = target as HTMLElement;
-        resizeStartStates.current = { left: htmlTarget.offsetLeft, width: htmlTarget.offsetWidth };
-        target.style.transition = 'none';
-
-        const content = (parseFloat(target.style.width) / timelineZoom).toFixed(2) + 's';
-        updateTooltip({ clientX, clientY }, content);
+        const { target, clientX, clientY, direction } = e;
+        resizeStartStates.current = {
+            left: parseFloat(target.style.left) || 0,
+            width: parseFloat(target.style.width) || 0,
+        };
+        const newTime = direction[0] === -1 ? clip.positionStart : clip.positionEnd;
+        updateTooltip({ clientX, clientY }, `${newTime.toFixed(2)}s`);
     };
 
     const onResize = (e: OnResize) => {
-        const { target, dist, direction, clientX, clientY, drag } = e;
+        const { target, width, height, dist, delta, direction, clientX, clientY } = e;
         if (!resizeStartStates.current) return;
 
-        const allElements = [...mediaFiles, ...textElements];
-        const originalClip = allElements.find(c => c.id === clip.id);
-        if (!originalClip) return;
+        const originalStart = resizeStartStates.current.left / timelineZoom;
+        const newWidthInSeconds = width / timelineZoom;
+        let newStart = originalStart;
 
-        const { left: startLeft, width: startWidth } = resizeStartStates.current;
-        const isMedia = 'sourceDuration' in originalClip;
-        let currentIsAtLimit: 'left' | 'right' | null = null;
-        let newWidth: number;
-        let newLeft: number;
-
-        if (direction[0] === -1) { // left resize
-            const distX = drag.dist[0];
-            newLeft = startLeft + distX;
-            newWidth = startWidth - distX;
-        } else { // right resize
-            newLeft = startLeft;
-            newWidth = startWidth + dist[0];
+        if (direction[0] === -1) { // Resizing from the left
+            newStart = (resizeStartStates.current.left + dist[0]) / timelineZoom;
         }
 
-        if (isSnappingEnabled) {
-            const otherElements = allElements.filter(el => el.id !== clip.id);
-            const elementSnapPoints = otherElements.flatMap(el => [el.positionStart, el.positionEnd]);
-            const markerSnapPoint = [currentTime];
-            const snapPoints = [...elementSnapPoints, ...markerSnapPoint];
+        const newEnd = newStart + newWidthInSeconds;
 
-            let snapDelta = 0;
-
-            if (direction[0] === -1) { // left resize
-                const currentStart = newLeft / timelineZoom;
-                for (const point of snapPoints) {
-                    const diff = Math.abs(currentStart - point) * timelineZoom;
-                    if (diff < SNAP_THRESHOLD_PX) {
-                        snapDelta = (point - currentStart) * timelineZoom;
-                        break;
-                    }
-                }
-                if (snapDelta !== 0) {
-                    newLeft += snapDelta;
-                    newWidth -= snapDelta;
-                }
-            } else { // right resize
-                const currentEnd = (newLeft + newWidth) / timelineZoom;
-                for (const point of snapPoints) {
-                    const diff = Math.abs(currentEnd - point) * timelineZoom;
-                    if (diff < SNAP_THRESHOLD_PX) {
-                        snapDelta = (point - currentEnd) * timelineZoom;
-                        break;
-                    }
-                }
-                if (snapDelta !== 0) {
-                    newWidth += snapDelta;
-                }
-            }
-        }
-
-        if (isMedia) {
-            if (direction[0] === -1) {
-                const mediaClip = originalClip as MediaFile;
-                const maxTimelineWidth = startWidth + (mediaClip.startTime * timelineZoom);
-                if (newWidth >= maxTimelineWidth) {
-                    currentIsAtLimit = 'left';
-                    newWidth = maxTimelineWidth;
-                    newLeft = startLeft + startWidth - newWidth;
-                }
-            } else {
-                const mediaClip = originalClip as MediaFile;
-                const maxTimelineWidth = startWidth + (mediaClip.sourceDuration - mediaClip.endTime) * timelineZoom;
-                if (newWidth >= maxTimelineWidth) {
-                    currentIsAtLimit = 'right';
-                    newWidth = maxTimelineWidth;
-                }
-            }
-        }
-
-        if (newLeft < 0) {
-            newWidth += newLeft;
-            newLeft = 0;
-        }
-
-        if (newWidth < MIN_DURATION * timelineZoom) {
-            newWidth = MIN_DURATION * timelineZoom;
-            if (direction[0] === -1) {
-                newLeft = startLeft + startWidth - newWidth;
-            }
-        }
-
-        target.style.width = `${newWidth}px`;
-        target.style.left = `${newLeft}px`;
-
-        setIsAtLimit(currentIsAtLimit);
-        const content = (newWidth / timelineZoom).toFixed(2) + 's';
-        updateTooltip({ clientX, clientY }, content);
+        const newTime = direction[0] === -1 ? newStart : newEnd;
+        throttledSetCurrentTime(newTime);
+        updateTooltip({ clientX, clientY }, `${newTime.toFixed(2)}s`);
+        
+        target.style.width = `${width}px`;
+        target.style.left = `${resizeStartStates.current.left + delta[0]}px`;
     };
 
     const onResizeEnd = (e: OnResizeEnd) => {
-        const { target } = e;
         hideTooltip();
-        setIsAtLimit(null);
-        const newLeftPx = parseFloat(target.style.left);
-        const newWidthPx = parseFloat(target.style.width);
+        if (!resizeStartStates.current) return;
 
-        const allElements = [...mediaFiles, ...textElements];
-        const originalClip = allElements.find(c => c.id === clip.id);
+        const { lastEvent } = e;
+        if (lastEvent) {
+            const newStart = parseFloat(lastEvent.target.style.left) / timelineZoom;
+            const newWidth = parseFloat(lastEvent.target.style.width) / timelineZoom;
+            const newEnd = newStart + newWidth;
 
-        if (originalClip) {
-            const newPositionStart = newLeftPx / timelineZoom;
-            const newPositionEnd = newPositionStart + (newWidthPx / timelineZoom);
-            let updateData: Partial<T> = { positionStart: newPositionStart, positionEnd: newPositionEnd } as Partial<T>;
-
-            if ('sourceDuration' in originalClip) {
-                const mediaClip = originalClip as MediaFile;
-                const newDuration = newPositionEnd - newPositionStart;
-                const oldDuration = mediaClip.positionEnd - mediaClip.positionStart;
-                const sourceUsedDuration = mediaClip.endTime - mediaClip.startTime;
-                const isLeftResize = Math.abs(newPositionStart - mediaClip.positionStart) > 0.0001;
-
-                let newStartTime = mediaClip.startTime;
-                let newEndTime = mediaClip.endTime;
-
-                if (isLeftResize) {
-                    const startTrimAmount = (mediaClip.positionStart - newPositionStart);
-                    if (Math.abs(startTrimAmount) > 0.0001) {
-                        const sourceTrimAmount = startTrimAmount * (sourceUsedDuration / oldDuration);
-                        newStartTime = Math.max(0, mediaClip.startTime - sourceTrimAmount);
-                        newEndTime = newStartTime + (newDuration * (sourceUsedDuration / oldDuration));
-                    } else {
-                        // Right resize
-                        newEndTime = newStartTime + (newDuration * (sourceUsedDuration / oldDuration));
-                    }
-                } else {
-                    newEndTime = newStartTime + (newDuration * (sourceUsedDuration / oldDuration));
-                }
-
-                updateData = {
-                    ...updateData,
-                    startTime: newStartTime,
-                    endTime: Math.min(newEndTime, mediaClip.sourceDuration),
-                };
-            }
+            const updatedClip = {
+                ...clip,
+                positionStart: newStart,
+                positionEnd: newEnd,
+            };
 
             if (elementType === 'media') {
-                const updatedMediaFiles = mediaFiles.map(file =>
-                    file.id === clip.id ? { ...file, ...updateData as Partial<MediaFile> } : file
-                );
+                const updatedMediaFiles = mediaFiles.map(m => m.id === clip.id ? updatedClip as MediaFile : m);
                 dispatch(setMediaFiles(updatedMediaFiles));
-            } else if (elementType === 'text') {
-                const updatedTextElements = textElements.map(element =>
-                    element.id === clip.id ? { ...element, ...updateData as Partial<TextElement> } : element
-                );
+            } else {
+                const updatedTextElements = textElements.map(t => t.id === clip.id ? updatedClip as TextElement : t);
                 dispatch(setTextElements(updatedTextElements));
             }
-
-            dispatch(setActiveElement([{ id: clip.id, type: elementType }]));
         }
+        resizeStartStates.current = null;
     };
 
     return {

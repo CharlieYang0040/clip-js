@@ -13,6 +13,7 @@ export default function FfmpegRender({}: FfmpegRenderProps) {
     const projectState = useAppSelector(state => state.projectState);
     const { mediaFiles, projectName, textElements } = projectState;
     const pollingRef = useRef<NodeJS.Timeout | null>(null);
+    const toastIdRef = useRef<string | null>(null);
     const [isOpen, setIsOpen] = useState(false);
 
     const [renderId, setRenderId] = useState<string | null>(null);
@@ -87,11 +88,13 @@ export default function FfmpegRender({}: FfmpegRenderProps) {
             setProgress(data.progress || 0);
 
             if (data.status === 'complete') {
+                if (toastIdRef.current) toast.dismiss(toastIdRef.current);
                 setStatus('complete');
                 setFinalUrl(data.url);
                 toast.success('Render Complete!');
                 if (pollingRef.current) clearInterval(pollingRef.current);
             } else if (data.status === 'error') {
+                if (toastIdRef.current) toast.dismiss(toastIdRef.current);
                 setStatus('error');
                 toast.error(`Render failed: ${data.message}`);
                 if (pollingRef.current) clearInterval(pollingRef.current);
@@ -100,6 +103,7 @@ export default function FfmpegRender({}: FfmpegRenderProps) {
             }
         } catch (error) {
             console.error('Error checking render status:', error);
+            if (toastIdRef.current) toast.dismiss(toastIdRef.current);
             setStatus('error');
             toast.error('Could not retrieve render status.');
             if (pollingRef.current) clearInterval(pollingRef.current);
@@ -138,6 +142,7 @@ export default function FfmpegRender({}: FfmpegRenderProps) {
             }
             setIsOpen(false);
             resetState();
+            toast.dismiss();
         }
     };
 
@@ -160,7 +165,7 @@ export default function FfmpegRender({}: FfmpegRenderProps) {
             );
             
             toast.dismiss();
-            toast.loading('Initializing render...');
+            toastIdRef.current = toast.loading('Initializing render...');
             const serverProjectState: ProjectState = { ...projectState, mediaFiles: uploadedMediaFiles };
 
             const response = await fetch('/api/render', {
@@ -179,7 +184,7 @@ export default function FfmpegRender({}: FfmpegRenderProps) {
             setStatus('starting'); 
 
         } catch (error) {
-            toast.dismiss();
+            if (toastIdRef.current) toast.dismiss(toastIdRef.current);
             toast.error(`Error: ${(error as Error).message}`);
             setStatus('idle');
         }

@@ -1,5 +1,5 @@
 import { useAppSelector } from "@/app/store";
-import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setSnapMode, setActiveGap, toggleActiveElement, resetActiveElements, addTrack, removeTrack, reorderTracks } from "@/app/store/slices/projectSlice";
+import { setMarkerTrack, setTextElements, setMediaFiles, setTimelineZoom, setCurrentTime, setIsPlaying, setSnapMode, setActiveGap, toggleActiveElement, resetActiveElements, addTrack, removeTrack, reorderTracks, toggleTrackMute, toggleTrackSolo } from "@/app/store/slices/projectSlice";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
@@ -517,29 +517,48 @@ export const Timeline = () => {
                                 onDrop={(e) => handleTrackDrop(e, track.id)}
                                 onDragLeave={() => setDragOverTrackHeaderId(null)}
                                 onDragEnd={() => { setDraggingTrackId(null); setDragOverTrackHeaderId(null); }}
-                                className={`group relative h-20 flex flex-col items-center justify-center p-2 border-b border-gray-700 cursor-grab ${draggingTrackId === track.id ? 'opacity-50' : ''} ${dragOverTrackHeaderId === track.id ? 'bg-blue-500 bg-opacity-30' : ''}`}
+                                className={`group relative h-20 flex items-center p-2 border-b border-gray-700 cursor-grab ${draggingTrackId === track.id ? 'opacity-50' : ''} ${dragOverTrackHeaderId === track.id ? 'bg-blue-500 bg-opacity-30' : ''}`}
                             >
-                                {icon && (
-                                    <Image
-                                        src={icon.src}
-                                        alt={icon.alt}
-                                        width={24}
-                                        height={24}
-                                        className="mb-1 invert"
-                                    />
-                                )}
-                                <span className="text-white text-sm font-semibold truncate">{track.name}</span>
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        dispatch(removeTrack(track.id));
-                                    }}
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    className="absolute top-1 right-1 z-10 p-1 rounded-full text-white bg-black bg-opacity-30 opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all duration-200"
-                                    aria-label="Remove track"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                </button>
+                                <div className="flex flex-col items-center gap-1 mr-2">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); dispatch(toggleTrackSolo(track.id)); }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        className={`p-1 rounded-full ${track.isSoloed ? 'bg-yellow-500' : 'bg-gray-600 hover:bg-yellow-400'}`}
+                                        title="Solo"
+                                    >
+                                        <Image src="/icons/solo.svg" alt="Solo" width={12} height={12} className="invert" />
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); dispatch(toggleTrackMute(track.id)); }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        className={`p-1 rounded-full ${track.isMuted ? 'bg-red-500' : 'bg-gray-600 hover:bg-red-500'}`}
+                                        title="Mute"
+                                    >
+                                        <Image src={track.isMuted ? "/icons/volume-off.svg" : "/icons/volume-up.svg"} alt="Mute" width={12} height={12} className="invert" />
+                                    </button>
+                                </div>
+                                <div className="flex flex-col items-center flex-grow text-center">
+                                    {icon && (
+                                        <Image
+                                            src={icon.src}
+                                            alt={icon.alt}
+                                            width={20}
+                                            height={20}
+                                            className="invert"
+                                        />
+                                    )}
+                                    <span className="text-white text-xs font-semibold truncate mt-1">{track.name}</span>
+                                </div>
+                                <div className="absolute top-1 right-1">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); dispatch(removeTrack(track.id)); }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        className="p-1 rounded-full bg-gray-600 hover:bg-red-600 opacity-0 group-hover:opacity-100"
+                                        title="Remove track"
+                                    >
+                                        <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                    </button>
+                                </div>
                             </div>
                         )
                     })}

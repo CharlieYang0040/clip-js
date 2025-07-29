@@ -72,12 +72,20 @@ const Composition = () => {
                 if ('src' in item && !item.src) return null;
                 const { elementType, ...trackItem } = item;
                 
+                const track = tracks.find(t => t.id === item.trackId);
+                if (!track) return null;
+
+                const isSoloActiveForType = tracks.some(t => t.type === track.type && t.isSoloed);
+                const isMuted = track.isMuted || (isSoloActiveForType && !track.isSoloed);
+
+                const props = { ...trackItem, isMuted };
+                
                 if (elementType === 'audio') {
-                    return SequenceItem[elementType](trackItem, { fps });
+                    return SequenceItem[elementType](props, { fps });
                 }
                 
                 if (elementType === 'video' || elementType === 'image' || elementType === 'text') {
-                    return SequenceItem[elementType](trackItem, { fps });
+                    return SequenceItem[elementType](props, { fps });
                 }
 
                 return null;

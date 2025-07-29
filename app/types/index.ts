@@ -7,6 +7,8 @@ export interface Track {
     name: string; // e.g., "Video 1", "Audio 2"
     visible: boolean;
     locked: boolean;
+    isMuted: boolean;
+    isSoloed: boolean;
 }
 
 export interface UploadedFile {
@@ -68,6 +70,7 @@ export interface TextElement {
     visible?: boolean;              // Internal flag for rendering logic
 }
 
+export type ElementType = MediaFile | TextElement;
 
 export type ExportFormat = 'mp4' | 'webm' | 'gif' | 'mov';
 

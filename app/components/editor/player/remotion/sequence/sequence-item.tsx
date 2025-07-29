@@ -22,9 +22,13 @@ const calculateFrames = (
 
 export const SequenceItem: Record<
     string,
-    (item: any, options: SequenceItemOptions) => JSX.Element> = {
-    video: (item: MediaFile & { zIndex: number }, options: SequenceItemOptions) => {
+    (item: any, options: SequenceItemOptions) => JSX.Element | null> = {
+    video: (item: MediaFile & { zIndex: number, isMuted?: boolean }, options: SequenceItemOptions) => {
         const { fps } = options;
+
+        if (item.isMuted) {
+            return null;
+        }
 
         const playbackRate = item.playbackSpeed || 1;
         const { from, durationInFrames } = calculateFrames(
@@ -79,7 +83,7 @@ export const SequenceItem: Record<
                         endAt={(trim.to) * fps + REMOTION_SAFE_FRAME}
                         playbackRate={playbackRate}
                         src={item.src || ""}
-                        volume={item.volume !== undefined ? item.volume / 100 : 1}
+                        volume={item.isMuted ? 0 : (item.volume !== undefined ? item.volume / 100 : 1)}
                         style={{
                             pointerEvents: "none",
                             width: '100%',
@@ -92,9 +96,12 @@ export const SequenceItem: Record<
             </Sequence>
         );
     },
-    text: (item: TextElement & { zIndex: number }, options: SequenceItemOptions) => {
+    text: (item: TextElement & { zIndex: number, isMuted?: boolean }, options: SequenceItemOptions) => {
         const { handleTextChange, fps, editableTextId } = options;
 
+        if (item.isMuted) {
+            return null;
+        }
 
         const { from, durationInFrames } = calculateFrames(
             {
@@ -146,8 +153,12 @@ export const SequenceItem: Record<
             </Sequence>
         );
     },
-    image: (item: MediaFile & { zIndex: number }, options: SequenceItemOptions) => {
+    image: (item: MediaFile & { zIndex: number, isMuted?: boolean }, options: SequenceItemOptions) => {
         const { fps } = options;
+
+        if (item.isMuted) {
+            return null;
+        }
 
         const { from, durationInFrames } = calculateFrames(
             {
@@ -204,7 +215,7 @@ export const SequenceItem: Record<
             </Sequence>
         );
     },
-    audio: (item: MediaFile, options: SequenceItemOptions) => {
+    audio: (item: MediaFile & { isMuted?: boolean }, options: SequenceItemOptions) => {
         const { fps } = options;
         const playbackRate = item.playbackSpeed || 1;
         const { from, durationInFrames } = calculateFrames(
@@ -235,7 +246,7 @@ export const SequenceItem: Record<
                         endAt={(trim.to) * fps + REMOTION_SAFE_FRAME}
                         playbackRate={playbackRate}
                         src={item.src || ""}
-                        volume={item.volume !== undefined ? item.volume / 100 : 1}
+                        volume={item.isMuted ? 0 : (item.volume !== undefined ? item.volume / 100 : 1)}
                     />
                 </AbsoluteFill>
             </Sequence>
