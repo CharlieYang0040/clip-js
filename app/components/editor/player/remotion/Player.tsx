@@ -20,6 +20,7 @@ export const PreviewPlayer = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const progressBarRef = useRef<HTMLDivElement>(null);
     const wasPlayingRef = useRef(false);
+    const wasDraggingRef = useRef(false);
     const dispatch = useAppDispatch();
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [isSeeking, setIsSeeking] = useState(false);
@@ -89,6 +90,7 @@ export const PreviewPlayer = () => {
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (isSeeking) {
+                wasDraggingRef.current = true;
                 handleScrub(e);
             }
         };
@@ -101,7 +103,8 @@ export const PreviewPlayer = () => {
                 }
                 setSeekTime(null);
                 if (wasPlayingRef.current) {
-                    dispatch(setIsPlaying(true));
+                    // dispatch(setIsPlaying(true));
+                    wasPlayingRef.current = false;
                 }
             }
         };
@@ -117,6 +120,10 @@ export const PreviewPlayer = () => {
 
     const handlePlayPauseClick = (e: React.MouseEvent) => {
         e.stopPropagation();
+        if (wasDraggingRef.current) {
+            wasDraggingRef.current = false;
+            return;
+        }
         dispatch(setIsPlaying(!isPlaying));
     };
     
@@ -177,6 +184,7 @@ export const PreviewPlayer = () => {
                             className="bg-gray-500/50 h-1.5 rounded-full cursor-pointer"
                             onMouseDown={(e) => {
                                 e.stopPropagation();
+                                wasDraggingRef.current = false;
                                 setIsSeeking(true);
                                 wasPlayingRef.current = isPlaying;
                                 dispatch(setIsPlaying(false));

@@ -27,6 +27,10 @@ export async function POST(request: NextRequest) {
         const outputPath = path.join(tempDir, outputFileName);
         const logPath = path.join(tempDir, `${renderId}.log`);
 
+        const usedMediaUrls = state.mediaFiles.map(mf => mf.url);
+        const manifestPath = path.join(tempDir, `${renderId}.json`);
+        await fs.promises.writeFile(manifestPath, JSON.stringify({ usedMediaUrls, renderId }));
+
         const params = extractConfigs(state.exportSettings);
         const filters: string[] = [];
         const inputs: any[] = [];
@@ -139,6 +143,7 @@ export async function POST(request: NextRequest) {
             '-c:a', 'aac',
             '-b:a', params.audioBitrate || '192k',
             '-t', state.duration.toFixed(3),
+            '-movflags', '+faststart',
             outputPath
         );
 
@@ -151,13 +156,17 @@ export async function POST(request: NextRequest) {
 
         ffmpegProcess.on('close', (code) => {
             logStream.end();
-            if (code !== 0) {
+            if (code === 0) {
+                fs.promises.writeFile(path.join(tempDir, `${renderId}.done`), 'done').catch(() => {});
+            } else {
                 fs.promises.writeFile(path.join(tempDir, `${renderId}.error`), `FFmpeg failed with code ${code}`).catch(() => {});
             }
             setTimeout(() => {
                 fs.promises.unlink(outputPath).catch(() => {});
                 fs.promises.unlink(logPath).catch(() => {});
+                fs.promises.unlink(manifestPath).catch(() => {});
                 fs.promises.unlink(path.join(tempDir, `${renderId}.error`)).catch(() => {});
+                fs.promises.unlink(path.join(tempDir, `${renderId}.done`)).catch(() => {});
             }, 600000);
         });
 
