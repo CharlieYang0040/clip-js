@@ -118,6 +118,7 @@ export interface ProjectState {
     exportSettings: ExportConfig;
     draggingElement: { clip: MediaFile | TextElement, elementType: 'media' | 'text' } | null;
     dragOverTrackId: string | null;
+    snapLine: number | null;
 }
 
 export const mimeToExt = {

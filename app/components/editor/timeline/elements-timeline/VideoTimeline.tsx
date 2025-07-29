@@ -10,8 +10,6 @@ import { MediaFile } from "@/app/types";
 import { debounce } from "lodash";
 import { useTimelineElement } from "@/app/hooks/useTimelineElement";
 
-const SNAP_THRESHOLD = 15;
-
 const Tooltip = ({ info }: { info: { visible: boolean; content: string; x: number; y: number } | null }) => {
     if (!info || !info.visible) return null;
     return ReactDOM.createPortal(
@@ -110,7 +108,6 @@ const VideoClipItem = memo(({
                 verticalGuidelines={verticalGuidelines}
                 snapDirections={{ "left": true, "right": true, "top": false, "bottom": false, "center": false, "middle": false }}
                 elementSnapDirections={{ "left": true, "right": true }}
-                snapThreshold={SNAP_THRESHOLD}
             />
         </div>
     );
@@ -119,7 +116,7 @@ VideoClipItem.displayName = 'VideoClipItem';
 
 export default function VideoTimeline({ trackId, trackIndex, totalTracks }: { trackId: string, trackIndex: number, totalTracks: number }) {
     const targetRefs = useRef<Record<string, HTMLDivElement | null>>({});
-    const { mediaFiles, textElements, activeElements, timelineZoom, isSnappingEnabled, currentTime, activeGap, duration } = useAppSelector((state) => state.projectState);
+    const { mediaFiles, textElements, activeElements, timelineZoom, isSnappingEnabled, currentTime, activeGap, duration, snapLine } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const moveableRef = useRef<Record<string, Moveable | null>>({});
 
@@ -226,6 +223,12 @@ export default function VideoTimeline({ trackId, trackIndex, totalTracks }: { tr
                     />
                 )
             })}
+            {snapLine !== null && (
+                <div 
+                    className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-50 pointer-events-none"
+                    style={{ left: `${snapLine * timelineZoom}px` }}
+                />
+            )}
         </div>
     );
 }

@@ -10,8 +10,6 @@ import { TextElement } from "@/app/types";
 import { debounce } from "lodash";
 import { useTimelineElement } from "@/app/hooks/useTimelineElement";
 
-const SNAP_THRESHOLD = 15;
-
 const Tooltip = ({ info }: { info: { visible: boolean; content: string; x: number; y: number } | null }) => {
     if (!info || !info.visible) return null;
     return ReactDOM.createPortal(
@@ -47,13 +45,13 @@ const TextClipItem = memo(({
         clip,
         elementType: 'text',
     });
-    
-    const { resizeInfo, isAtLimit } = moveableProps;
 
+    const { resizeInfo, isAtLimit } = moveableProps;
+    
     useEffect(() => {
         moveableRef.current?.updateRect();
     }, [timelineZoom, clip.positionStart, clip.positionEnd]);
-
+    
     useEffect(() => {
         const moveableInstance = moveableRef.current;
         if (moveableInstance) {
@@ -83,9 +81,10 @@ const TextClipItem = memo(({
                     left: `${clip.positionStart * timelineZoom}px`,
                     width: `${(clip.positionEnd - clip.positionStart) * timelineZoom}px`,
                     zIndex: clip.zIndex,
+                    transition: 'none',
                 }}
             >
-                <Image
+                 <Image
                     alt="Text"
                     className="h-7 w-7 min-w-6 mr-2 flex-shrink-0"
                     height={30}
@@ -109,7 +108,6 @@ const TextClipItem = memo(({
                 verticalGuidelines={verticalGuidelines}
                 snapDirections={{ "left": true, "right": true, "top": false, "bottom": false, "center": false, "middle": false }}
                 elementSnapDirections={{ "left": true, "right": true }}
-                snapThreshold={SNAP_THRESHOLD}
             />
         </div>
     );
@@ -118,48 +116,66 @@ TextClipItem.displayName = 'TextClipItem';
 
 export default function TextTimeline({ trackId, trackIndex, totalTracks }: { trackId: string, trackIndex: number, totalTracks: number }) {
     const targetRefs = useRef<Record<string, HTMLDivElement | null>>({});
-    const { mediaFiles, textElements, activeElements, timelineZoom, isSnappingEnabled, currentTime, activeGap, duration } = useAppSelector((state) => state.projectState);
+    const { mediaFiles, textElements, activeElements, timelineZoom, isSnappingEnabled, currentTime, activeGap, duration, snapLine } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const moveableRef = useRef<Record<string, Moveable | null>>({});
 
-    const sortedTextElements = useMemo(() =>
-        [...textElements].filter(clip => clip.trackId === trackId).sort((a, b) => a.positionStart - b.positionStart),
+    const textClips = useMemo(() =>
+        textElements.filter(clip => clip.trackId === trackId).sort((a, b) => a.positionStart - b.positionStart),
         [textElements, trackId]
     );
 
     const gaps = useMemo(() => {
         const calculatedGaps: { start: number, end: number }[] = [];
         let lastEnd = 0;
-        for (const element of sortedTextElements) {
+        for (const element of textClips) {
             if (element.positionStart > lastEnd) {
                 calculatedGaps.push({ start: lastEnd, end: element.positionStart });
             }
             lastEnd = Math.max(lastEnd, element.positionEnd);
         }
         return calculatedGaps;
-    }, [sortedTextElements]);
+    }, [textClips]);
 
     const { tickInterval } = useMemo(() => {
         if (timelineZoom < 2) return { tickInterval: 45 };
+        if (timelineZoom < 3) return { tickInterval: 30 };
+        if (timelineZoom < 4) return { tickInterval: 20 };
+        if (timelineZoom < 5) return { tickInterval: 15 };
+        if (timelineZoom < 6) return { tickInterval: 12 };
+        if (timelineZoom < 10) return { tickInterval: 10 };
+        if (timelineZoom < 15) return { tickInterval: 5 };
+        if (timelineZoom < 25) return { tickInterval: 2 };
+        if (timelineZoom < 50) return { tickInterval: 1 };
+        if (timelineZoom < 100) return { tickInterval: 0.5 };
+        if (timelineZoom < 200) return { tickInterval: 0.2 };
+        if (timelineZoom < 400) return { tickInterval: 0.1 };
         if (timelineZoom < 800) return { tickInterval: 0.05 };
         return { tickInterval: 0.02 };
     }, [timelineZoom]);
 
     const verticalGuidelines = useMemo(() => {
         if (!isSnappingEnabled) return [];
+    
         const points: number[] = [0, currentTime * timelineZoom];
         const draggedIds = new Set(activeElements.map(e => e.id));
+        
         const totalSeconds = Math.max(duration + 2, 61);
         const tickMarkers = Array.from({ length: Math.ceil(totalSeconds / tickInterval) }, (_, i) => i * tickInterval);
         tickMarkers.forEach(tick => points.push(tick * timelineZoom));
+
         mediaFiles.forEach(clip => {
-            points.push(clip.positionStart * timelineZoom, clip.positionEnd * timelineZoom);
+            if (!draggedIds.has(clip.id)) {
+                points.push(clip.positionStart * timelineZoom, clip.positionEnd * timelineZoom);
+            }
         });
+    
         textElements.forEach(text => {
             if (!draggedIds.has(text.id)) {
                 points.push(text.positionStart * timelineZoom, text.positionEnd * timelineZoom);
             }
         });
+    
         return Array.from(new Set(points));
     }, [isSnappingEnabled, currentTime, timelineZoom, mediaFiles, textElements, activeElements, duration, tickInterval]);
 
@@ -174,13 +190,13 @@ export default function TextTimeline({ trackId, trackIndex, totalTracks }: { tra
     useEffect(() => {
         for (const clip of textElements) {
             if (targetRefs.current[clip.id]) {
-                moveableRef.current[clip.id]?.updateRect();
+                 moveableRef.current[clip.id]?.updateRect();
             }
         }
     }, [timelineZoom, textElements]);
 
     return (
-        <div className="relative h-full w-full">
+        <div className="relative h-full">
             {gaps.map((gap, index) => (
                 <div
                     key={`gap-text-${index}`}
@@ -192,8 +208,8 @@ export default function TextTimeline({ trackId, trackIndex, totalTracks }: { tra
                     onClick={(e) => handleGapClick(gap, e)}
                 />
             ))}
-            {sortedTextElements.map((clip) => {
-                const baseZIndex = (totalTracks - trackIndex - 1) * 10;
+            {textClips.map((clip) => {
+                const baseZIndex = (totalTracks - trackIndex -1) * 10;
                 const finalZIndex = baseZIndex + (clip.layerOrder || 0);
                 return (
                     <TextClipItem
@@ -205,10 +221,16 @@ export default function TextTimeline({ trackId, trackIndex, totalTracks }: { tra
                         isSelected={isSelected}
                         activeElementsLength={activeElements.length}
                     />
-                );
+                )
             })}
+            {snapLine !== null && (
+                <div 
+                    className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-50 pointer-events-none"
+                    style={{ left: `${snapLine * timelineZoom}px` }}
+                />
+            )}
         </div>
     );
 }
 
-memo(TextTimeline);
+memo(TextTimeline)

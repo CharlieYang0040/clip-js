@@ -134,9 +134,15 @@ export default function FfmpegRender({}: FfmpegRenderProps) {
                 setIsOpen(false);
             }
         } else {
-            if (status === 'complete' && renderId) {
-                fetch(`/api/video/temp/${renderId}`, {
-                    method: 'DELETE',
+            if (status === 'complete') {
+                if (renderId) {
+                    fetch(`/api/video/temp/${renderId}`, {
+                        method: 'DELETE',
+                        keepalive: true,
+                    });
+                }
+                fetch('/api/video/cleanup', {
+                    method: 'POST',
                     keepalive: true,
                 });
             }
@@ -148,11 +154,31 @@ export default function FfmpegRender({}: FfmpegRenderProps) {
 
     const render = async () => {
         setStatus('starting');
-        toast.loading('Starting render...');
 
         try {
+            const { tracks, mediaFiles, textElements } = projectState;
+            const isSoloActive = tracks.some(track => track.isSoloed);
+
+            const activeMediaFiles = mediaFiles.filter(mediaFile => {
+                const track = tracks.find(t => t.id === mediaFile.trackId);
+                if (!track) return false;
+                if (isSoloActive) {
+                    return track.isSoloed && !track.isMuted;
+                }
+                return !track.isMuted;
+            });
+            
+            const activeTextElements = textElements.filter(textElement => {
+                const track = tracks.find(t => t.id === textElement.trackId);
+                if (!track) return false;
+                if (isSoloActive) {
+                    return track.isSoloed && !track.isMuted;
+                }
+                return !track.isMuted;
+            });
+
             const uploadedMediaFiles = await Promise.all(
-                projectState.mediaFiles.map(async (mediaFile) => {
+                activeMediaFiles.map(async (mediaFile) => {
                     const file = await getFile(mediaFile.url!);
                     if (!file) throw new Error(`File not found for ${mediaFile.fileName}`);
                     const formData = new FormData();
@@ -164,9 +190,13 @@ export default function FfmpegRender({}: FfmpegRenderProps) {
                 })
             );
             
-            toast.dismiss();
+            if (toastIdRef.current) toast.dismiss(toastIdRef.current);
             toastIdRef.current = toast.loading('Initializing render...');
-            const serverProjectState: ProjectState = { ...projectState, mediaFiles: uploadedMediaFiles };
+            const serverProjectState: ProjectState = { 
+                ...projectState, 
+                mediaFiles: uploadedMediaFiles,
+                textElements: activeTextElements 
+            };
 
             const response = await fetch('/api/render', {
                 method: 'POST',

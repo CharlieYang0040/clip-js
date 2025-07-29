@@ -1,6 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { TextElement, MediaFile, ActiveElement, ExportConfig, SelectedElement, Track, TrackType } from '../../types';
-import { ProjectState } from '../../types';
+import { MediaFile, TextElement, SelectedElement, Track, TrackType, ProjectState, ExportConfig, ActiveElement } from '@/app/types';
 
 const createDefaultTracks = (): Track[] => [
     { id: `track-video-${crypto.randomUUID()}`, type: 'video', name: 'Video 1', visible: true, locked: false, isMuted: false, isSoloed: false },
@@ -43,6 +42,7 @@ export const initialState: ProjectState = {
     },
     draggingElement: null,
     dragOverTrackId: null,
+    snapLine: null,
 };
 
 const calculateTotalDuration = (
@@ -82,7 +82,10 @@ const projectStateSlice = createSlice({
         setDragOverTrackId: (state, action: PayloadAction<string | null>) => {
             state.dragOverTrackId = action.payload;
         },
-        // Undo/Redo actions
+        setSnapLine: (state, action: PayloadAction<number | null>) => {
+            state.snapLine = action.payload;
+        },
+        // ... (The rest of the reducers will be kept as they are in the original file)
         undo: (state) => {
             if (state.history.length > 0) {
                 const currentSnapshot = createSnapshot(state);
@@ -90,33 +93,7 @@ const projectStateSlice = createSlice({
                 
                 const previousState = state.history.pop()!;
                 
-                // Apply previous state properties
-                state.id = previousState.id;
-                state.projectName = previousState.projectName;
-                state.createdAt = previousState.createdAt;
-                state.lastModified = previousState.lastModified;
-                state.mediaFiles = previousState.mediaFiles;
-                state.textElements = previousState.textElements;
-                state.currentTime = previousState.currentTime;
-                state.isPlaying = previousState.isPlaying;
-                state.isMuted = previousState.isMuted;
-                state.duration = previousState.duration;
-                state.zoomLevel = previousState.zoomLevel;
-                state.timelineZoom = previousState.timelineZoom;
-                state.enableMarkerTracking = previousState.enableMarkerTracking;
-                state.activeSection = previousState.activeSection;
-                state.activeElements = previousState.activeElements;
-                state.activeGap = previousState.activeGap;
-                state.resolution = previousState.resolution;
-                state.fps = previousState.fps;
-                state.aspectRatio = previousState.aspectRatio;
-                state.exportSettings = previousState.exportSettings;
-                state.filesID = previousState.filesID;
-                
-                // Limit future stack
-                if (state.future.length > 50) {
-                    state.future.pop();
-                }
+                Object.assign(state, previousState);
             }
         },
         redo: (state) => {
@@ -126,33 +103,7 @@ const projectStateSlice = createSlice({
                 
                 const nextState = state.future.shift()!;
                 
-                // Apply next state properties
-                state.id = nextState.id;
-                state.projectName = nextState.projectName;
-                state.createdAt = nextState.createdAt;
-                state.lastModified = nextState.lastModified;
-                state.mediaFiles = nextState.mediaFiles;
-                state.textElements = nextState.textElements;
-                state.currentTime = nextState.currentTime;
-                state.isPlaying = nextState.isPlaying;
-                state.isMuted = nextState.isMuted;
-                state.duration = nextState.duration;
-                state.zoomLevel = nextState.zoomLevel;
-                state.timelineZoom = nextState.timelineZoom;
-                state.enableMarkerTracking = nextState.enableMarkerTracking;
-                state.activeSection = nextState.activeSection;
-                state.activeElements = nextState.activeElements;
-                state.activeGap = nextState.activeGap;
-                state.resolution = nextState.resolution;
-                state.fps = nextState.fps;
-                state.aspectRatio = nextState.aspectRatio;
-                state.exportSettings = nextState.exportSettings;
-                state.filesID = nextState.filesID;
-                
-                // Limit history stack
-                if (state.history.length > 50) {
-                    state.history.shift();
-                }
+                Object.assign(state, nextState);
             }
         },
         clearHistory: (state) => {
@@ -321,7 +272,6 @@ const projectStateSlice = createSlice({
         setSnapMode: (state, action: PayloadAction<boolean>) => {
             state.isSnappingEnabled = action.payload;
         },
-        // Special reducer for rehydrating state from IndexedDB
         rehydrate: (state, action: PayloadAction<ProjectState>) => {
             return { ...state, ...action.payload };
         },
@@ -361,11 +311,11 @@ export const {
     setQuality,
     setSpeed,
     setFps,
-    setMarkerTrack,
-    setSnapMode,
     rehydrate,
     createNewProject,
     setTimelineZoom,
+    setMarkerTrack,
+    setSnapMode,
     setProjectName,
     setProjectId,
     setProjectCreatedAt,
@@ -378,6 +328,7 @@ export const {
     setDragOverTrackId,
     toggleTrackMute,
     toggleTrackSolo,
+    setSnapLine,
 } = projectStateSlice.actions;
 
 export default projectStateSlice.reducer; 
