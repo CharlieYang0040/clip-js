@@ -98,6 +98,70 @@ export const Timeline = () => {
         };
     }, []);
 
+    const handleDragStart = (e: React.MouseEvent) => {
+        wasDragging.current = false;
+        setIsDraggingMarker(true);
+        setDragStartX(e.clientX);
+        lastDragX.current = e.clientX;
+
+        if (timelineRef.current) {
+            const rect = timelineRef.current.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const scrollLeft = timelineRef.current.scrollLeft;
+            const time = (x + scrollLeft) / timelineZoom;
+            const newTime = Math.max(0, time);
+
+            setInitialTime(newTime);
+            setLocalCurrentTime(newTime);
+            smoothTimeUpdate(newTime);
+        } else {
+            setInitialTime(currentTime);
+        }
+
+        if (isPlaying) {
+            dispatch(setIsPlaying(false));
+        }
+    };
+
+    const handleDragMove = useCallback((e: MouseEvent) => {
+        if (!isDraggingMarker) return;
+
+        wasDragging.current = true;
+
+        if (enableMarkerTracking) {
+            const dx = e.clientX - lastDragX.current;
+            const dt = dx / timelineZoom;
+            const newTime = Math.max(0, localCurrentTime + dt);
+
+            lastDragX.current = e.clientX;
+
+            setLocalCurrentTime(newTime);
+            smoothTimeUpdate(newTime);
+        } else {
+            const deltaX = e.clientX - dragStartX;
+            const deltaTime = deltaX / timelineZoom;
+            const newTime = Math.max(0, initialTime + deltaTime);
+
+            setLocalCurrentTime(newTime);
+            smoothTimeUpdate(newTime);
+        }
+    }, [isDraggingMarker, dragStartX, timelineZoom, initialTime, smoothTimeUpdate, enableMarkerTracking, localCurrentTime]);
+
+    const handleDragEnd = useCallback(() => {
+        setIsDraggingMarker(false);
+    }, []);
+
+    useEffect(() => {
+        if (isDraggingMarker) {
+            document.addEventListener('mousemove', handleDragMove);
+            document.addEventListener('mouseup', handleDragEnd);
+            return () => {
+                document.removeEventListener('mousemove', handleDragMove);
+                document.removeEventListener('mouseup', handleDragEnd);
+            };
+        }
+    }, [isDraggingMarker, handleDragMove, handleDragEnd]);
+
     const handleSplit = () => {
         if (activeElements.length === 0) {
             toast.error('No element selected.');
@@ -294,69 +358,16 @@ export const Timeline = () => {
         }
     };
 
-    const handleDragStart = (e: React.MouseEvent) => {
-        wasDragging.current = false;
-        setIsDraggingMarker(true);
-        setDragStartX(e.clientX);
-        lastDragX.current = e.clientX;
-
-        if (timelineRef.current) {
-            const rect = timelineRef.current.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const scrollLeft = timelineRef.current.scrollLeft;
-            const time = (x + scrollLeft) / timelineZoom;
-            const newTime = Math.max(0, time);
-
-            setInitialTime(newTime);
-            setLocalCurrentTime(newTime);
-            smoothTimeUpdate(newTime);
-        } else {
-            setInitialTime(currentTime);
+    const handleDeselectElements = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (e.target !== e.currentTarget) {
+            return;
         }
-
-        if (isPlaying) {
-            dispatch(setIsPlaying(false));
+        if (wasDragging.current) {
+            return;
         }
+        // 선택 해제만 하고 재생헤드는 이동하지 않음
+        dispatch(resetActiveElements());
     };
-
-    const handleDragMove = useCallback((e: MouseEvent) => {
-        if (!isDraggingMarker) return;
-
-        wasDragging.current = true;
-
-        if (enableMarkerTracking) {
-            const dx = e.clientX - lastDragX.current;
-            const dt = dx / timelineZoom;
-            const newTime = Math.max(0, localCurrentTime + dt);
-
-            lastDragX.current = e.clientX;
-
-            setLocalCurrentTime(newTime);
-            smoothTimeUpdate(newTime);
-        } else {
-            const deltaX = e.clientX - dragStartX;
-            const deltaTime = deltaX / timelineZoom;
-            const newTime = Math.max(0, initialTime + deltaTime);
-
-            setLocalCurrentTime(newTime);
-            smoothTimeUpdate(newTime);
-        }
-    }, [isDraggingMarker, dragStartX, timelineZoom, initialTime, smoothTimeUpdate, enableMarkerTracking, localCurrentTime]);
-
-    const handleDragEnd = useCallback(() => {
-        setIsDraggingMarker(false);
-    }, []);
-
-    useEffect(() => {
-        if (isDraggingMarker) {
-            document.addEventListener('mousemove', handleDragMove);
-            document.addEventListener('mouseup', handleDragEnd);
-            return () => {
-                document.removeEventListener('mousemove', handleDragMove);
-                document.removeEventListener('mouseup', handleDragEnd);
-            };
-        }
-    }, [isDraggingMarker, handleDragMove, handleDragEnd]);
 
     const handleAddTrack = (type: TrackType) => {
         dispatch(addTrack(type));
@@ -585,20 +596,34 @@ export const Timeline = () => {
                         <Header onDragStart={handleDragStart} />
                     </div>
 
-                    <div className="bg-[#1E1D21]" style={{ width: `${timelineContainerWidth}px` }}>
+                    <div 
+                        className="bg-[#1E1D21]" 
+                        style={{ width: `${timelineContainerWidth}px` }}
+                        onClick={(e) => {
+                            if (e.target === e.currentTarget) {
+                                handleDeselectElements(e);
+                            }
+                        }}
+                    >
                         <div
-                            className={`absolute top-0 bottom-0 w-[2px] z-50 cursor-ew-resize bg-red-500`}
+                            className={`absolute top-0 bottom-0 w-[2px] z-50 bg-red-500`}
                             style={{
                                 left: `${localCurrentTime * timelineZoom}px`,
                             }}
-                            onMouseDown={handleDragStart}
                         >
                             <div className={`absolute -top-8 -left-8 text-white text-xs px-2 py-1 rounded whitespace-nowrap border bg-red-500 border-red-400 transition-all duration-300`}>
                                 {(localCurrentTime).toFixed(2)}s
                             </div>
                         </div>
                         
-                        <div className="w-full h-full relative">
+                        <div 
+                            className="w-full h-full relative"
+                            onClick={(e) => {
+                                if (e.target === e.currentTarget) {
+                                    handleDeselectElements(e);
+                                }
+                            }}
+                        >
                             {tracks.map((track: Track, index) => {
                                 const totalTracks = tracks.length;
                                 const component = (() => {
@@ -629,8 +654,20 @@ export const Timeline = () => {
                                         key={track.id} 
                                         data-track-id={track.id}
                                         className={`relative h-20 border-b border-gray-700 transition-colors duration-200 ${isOver && canDrop ? 'bg-green-500 bg-opacity-20' : ''}`}
+                                        onClick={(e) => {
+                                            if (e.target === e.currentTarget) {
+                                                handleDeselectElements(e);
+                                            }
+                                        }}
                                     >
-                                        <div className="relative h-full flex-grow flex items-center">
+                                        <div 
+                                            className="relative h-full flex-grow flex items-center"
+                                            onClick={(e) => {
+                                                if (e.target === e.currentTarget) {
+                                                    handleDeselectElements(e);
+                                                }
+                                            }}
+                                        >
                                             {component}
                                         </div>
                                     </div>

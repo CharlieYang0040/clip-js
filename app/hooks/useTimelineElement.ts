@@ -230,8 +230,8 @@ export function useTimelineElement<T extends ElementType>({
         let newWidthPx = startWidthPx;
 
         if (direction[0] === -1) { // Resizing left
-            newLeftPx = startLeftPx + dist[0];
-            newWidthPx = startWidthPx - dist[0];
+            newLeftPx = startLeftPx - dist[0];
+            newWidthPx = startWidthPx + dist[0];
         } else { // Resizing right
             newWidthPx = startWidthPx + dist[0];
         }
