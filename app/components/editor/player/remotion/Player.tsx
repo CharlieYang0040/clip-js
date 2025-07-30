@@ -15,7 +15,7 @@ const formatTime = (seconds: number) => {
 
 export const PreviewPlayer = () => {
     const projectState = useAppSelector((state) => state.projectState);
-    const { duration, currentTime, isPlaying, isMuted } = projectState;
+    const { duration, currentTime, previewTime, isPlaying, isMuted } = projectState;
     const playerRef = useRef<PlayerRef>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const progressBarRef = useRef<HTMLDivElement>(null);
@@ -26,14 +26,17 @@ export const PreviewPlayer = () => {
     const [isSeeking, setIsSeeking] = useState(false);
     const [seekTime, setSeekTime] = useState<number | null>(null);
 
-    const displayTime = seekTime ?? currentTime;
+    // previewTime이 있으면 우선 사용, 없으면 seekTime 또는 currentTime 사용
+    const displayTime = previewTime ?? seekTime ?? currentTime;
 
     useEffect(() => {
-        const frame = Math.round(currentTime * fps);
-        if (playerRef.current && !isPlaying && !isSeeking) {
+        // previewTime이나 seekTime이 있을 때는 해당 시간으로 seek
+        const targetTime = previewTime ?? (isSeeking ? seekTime : currentTime) ?? currentTime;
+        const frame = Math.round(targetTime * fps);
+        if (playerRef.current && (!isPlaying || previewTime !== null)) {
             playerRef.current.seekTo(frame);
         }
-    }, [currentTime, isPlaying, isSeeking]);
+    }, [currentTime, previewTime, isPlaying, isSeeking, seekTime]);
 
     useEffect(() => {
         if (!playerRef.current) return;
@@ -58,7 +61,8 @@ export const PreviewPlayer = () => {
         if (!player) return;
 
         const onTimeUpdate = (e: any) => {
-            if (!isSeeking) {
+            // previewTime이 활성화되어 있으면 currentTime 업데이트를 막음
+            if (!isSeeking && previewTime === null) {
                 dispatch(setCurrentTime(e.detail.frame / fps));
             }
         };
@@ -74,7 +78,7 @@ export const PreviewPlayer = () => {
             player.removeEventListener('play', onPlay);
             player.removeEventListener('pause', onPause);
         };
-    }, [dispatch, isSeeking]);
+    }, [dispatch, isSeeking, previewTime]);
 
     const handleScrub = (e: MouseEvent) => {
         if (progressBarRef.current && playerRef.current) {

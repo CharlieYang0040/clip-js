@@ -7,7 +7,7 @@ import { setCurrentTime, setMediaFiles } from "@/app/store/slices/projectSlice";
 
 const Composition = () => {
     const projectState = useAppSelector((state) => state.projectState);
-    const { mediaFiles, textElements, currentTime, tracks } = projectState;
+    const { mediaFiles, textElements, currentTime, previewTime, tracks } = projectState;
     const frame = useCurrentFrame();
     const dispatch = useAppDispatch();
 
@@ -19,6 +19,11 @@ const Composition = () => {
     useEffect(() => {
         const fps = 30;
         const currentTimeInSeconds = frame / fps;
+        
+        // previewTime이 활성화되어 있을 때는 currentTime 업데이트 차단
+        if (previewTime !== null) {
+            return;
+        }
         
         // Clear existing timeout
         if (timeoutRef.current) {
@@ -49,7 +54,7 @@ const Composition = () => {
                 clearTimeout(timeoutRef.current);
             }
         };
-    }, [frame, dispatch, currentTime]);
+    }, [frame, dispatch, currentTime, previewTime]);
 
     const fps = 30;
 

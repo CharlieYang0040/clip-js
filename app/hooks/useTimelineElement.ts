@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useAppSelector, useAppDispatch } from '@/app/store';
-import { toggleActiveElement, setMediaFiles, setTextElements, setDraggingElement, setDragOverTrackId, setCurrentTime, setSnapLine } from '@/app/store/slices/projectSlice';
+import { toggleActiveElement, setMediaFiles, setTextElements, setDraggingElement, setDragOverTrackId, setCurrentTime, setSnapLine, setPreviewTime, clearPreviewTime } from '@/app/store/slices/projectSlice';
 import { MediaFile, TextElement, SelectedElement } from '@/app/types';
 import { OnDrag, OnDragStart, OnResize, OnResizeStart, OnResizeEnd, OnDragEnd } from 'react-moveable';
 import { throttle } from 'lodash';
@@ -293,13 +293,13 @@ export function useTimelineElement<T extends ElementType>({
         target.style.width = `${newWidthPx}px`;
 
         const newTime = direction[0] === -1 ? newStart : newEnd;
-        throttledSetCurrentTime(newTime);
+        dispatch(setPreviewTime(newTime));
         updateTooltip({ clientX, clientY }, `${newTime.toFixed(2)}s`);
     };
 
     const onResizeEnd = (e: OnResizeEnd) => {
         hideTooltip();
-        throttledSetCurrentTime.flush();
+        dispatch(clearPreviewTime());
         if (!resizeStartStates.current) return;
 
         const { lastEvent } = e;

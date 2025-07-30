@@ -21,7 +21,7 @@ const trackTypeIcons = {
 };
 
 export const Timeline = () => {
-    const { currentTime, timelineZoom, enableMarkerTracking, activeElements, mediaFiles, textElements, duration, isPlaying, isSnappingEnabled, activeGap, tracks, draggingElement, dragOverTrackId } = useAppSelector((state) => state.projectState);
+    const { currentTime, previewTime, timelineZoom, enableMarkerTracking, activeElements, mediaFiles, textElements, duration, isPlaying, isSnappingEnabled, activeGap, tracks, draggingElement, dragOverTrackId } = useAppSelector((state) => state.projectState);
     const dispatch = useDispatch();
     const timelineRef = useRef<HTMLDivElement>(null);
     const wasDragging = useRef(false);
@@ -46,16 +46,20 @@ export const Timeline = () => {
     );
 
     useEffect(() => {
-        if (timelineRef.current && enableMarkerTracking) {
+        // previewTime이 활성화되어 있을 때는 마커 트래킹 비활성화
+        if (timelineRef.current && enableMarkerTracking && previewTime === null) {
             const markerLeft = currentTime * timelineZoom;
             const containerWidth = timelineRef.current.offsetWidth;
             timelineRef.current.scrollLeft = markerLeft - containerWidth / 2;
         }
-    }, [currentTime, timelineZoom, enableMarkerTracking]);
+    }, [currentTime, timelineZoom, enableMarkerTracking, previewTime]);
 
     useEffect(() => {
         const timeline = timelineRef.current;
         if (!timeline) return;
+        
+        // previewTime이 활성화되어 있을 때는 줌 로직 비활성화
+        if (previewTime !== null) return;
 
         const oldZoom = prevZoomRef.current;
         const newZoom = timelineZoom;
@@ -69,7 +73,7 @@ export const Timeline = () => {
         timeline.scrollLeft += scrollOffset;
 
         prevZoomRef.current = newZoom;
-    }, [timelineZoom, currentTime]);
+    }, [timelineZoom, currentTime, previewTime]);
 
     useEffect(() => {
         if (!isDraggingMarker) {

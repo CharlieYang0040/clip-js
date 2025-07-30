@@ -17,6 +17,7 @@ export const initialState: ProjectState = {
     mediaFiles: [],
     textElements: [],
     currentTime: 0,
+    previewTime: null, // trim 중 프리뷰용 시간
     isPlaying: false,
     isMuted: false,
     duration: 0,
@@ -207,6 +208,12 @@ const projectStateSlice = createSlice({
         setCurrentTime: (state, action: PayloadAction<number>) => {
             state.currentTime = action.payload;
         },
+        setPreviewTime: (state, action: PayloadAction<number | null>) => {
+            state.previewTime = action.payload;
+        },
+        clearPreviewTime: (state) => {
+            state.previewTime = null;
+        },
         setIsPlaying: (state, action: PayloadAction<boolean>) => {
             state.isPlaying = action.payload;
         },
@@ -298,6 +305,8 @@ export const {
     setTextElements,
     updateTextElements_INTERNAL,
     setCurrentTime,
+    setPreviewTime,
+    clearPreviewTime,
     setIsPlaying,
     setIsMuted,
     setActiveSection,

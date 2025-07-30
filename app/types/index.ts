@@ -97,6 +97,7 @@ export interface ProjectState {
     textElements: TextElement[];
     filesID?: string[],
     currentTime: number;
+    previewTime: number | null; // trim 중 프리뷰용 시간
     isPlaying: boolean;
     isMuted: boolean;
     duration: number;

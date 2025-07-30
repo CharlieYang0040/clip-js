@@ -9,6 +9,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { rende
     }
 
     const tempDir = path.join(process.cwd(), '.tmp');
+    
+    // URL 파라미터로 성공 마커 보존 여부를 확인
+    const url = new URL(request.url);
+    const preserveSuccess = url.searchParams.get('preserveSuccess') === 'true';
 
     try {
         const manifestPath = path.join(tempDir, `${renderId}.json`);
@@ -25,13 +29,34 @@ export async function DELETE(request: NextRequest, { params }: { params: { rende
         console.error('Could not read or process manifest file for temp cleanup:', err);
     }
 
-    // Delete all temp files for this renderId
+    // Delete temp files for this renderId
     const tempFiles = await fs.promises.readdir(tempDir);
+    const deletedFiles: string[] = [];
+    const preservedFiles: string[] = [];
+    
     for (const file of tempFiles) {
         if (file.startsWith(renderId)) {
-            await fs.promises.unlink(path.join(tempDir, file)).catch(() => {});
+            // 저장 완료 후에는 .done 파일을 보존
+            if (preserveSuccess && file.endsWith('.done')) {
+                preservedFiles.push(file);
+                console.log(`Preserved success marker: ${file}`);
+                continue;
+            }
+            
+            try {
+                await fs.promises.unlink(path.join(tempDir, file));
+                deletedFiles.push(file);
+                console.log(`Deleted temp file: ${file}`);
+            } catch (err) {
+                console.error(`Failed to delete temp file ${file}:`, err);
+            }
         }
     }
 
-    return NextResponse.json({ message: 'Temporary files cleaned up' });
+    return NextResponse.json({ 
+        message: 'Temporary files cleaned up',
+        deleted: deletedFiles,
+        preserved: preservedFiles,
+        preserveSuccess
+    });
 } 
