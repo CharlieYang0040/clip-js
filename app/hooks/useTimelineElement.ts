@@ -239,25 +239,28 @@ export function useTimelineElement<T extends ElementType>({
         let newStart = newLeftPx / timelineZoom;
         let newEnd = (newLeftPx + newWidthPx) / timelineZoom;
         
-        // Clamping for media files first
+        // Clamping for media files first (exclude images)
         setIsAtLimit(null);
         if (elementType === 'media') {
             const mediaClip = clip as MediaFile;
-            if (direction[0] === -1) { // Resizing left
-                const minStartTime = 0;
-                const maxClipDuration = mediaClip.endTime - minStartTime;
-                const currentDuration = newEnd - newStart;
-                if (currentDuration > maxClipDuration) {
-                    newStart = newEnd - maxClipDuration;
-                    setIsAtLimit('left');
-                }
-            } else { // Resizing right
-                const maxEndTime = mediaClip.sourceDuration;
-                const maxClipDuration = maxEndTime - mediaClip.startTime;
-                const currentDuration = newEnd - newStart;
-                if (currentDuration > maxClipDuration) {
-                    newEnd = newStart + maxClipDuration;
-                    setIsAtLimit('right');
+            // 이미지는 source duration 제한 없이 자유롭게 늘릴 수 있음
+            if (mediaClip.type === 'video' || mediaClip.type === 'audio') {
+                if (direction[0] === -1) { // Resizing left
+                    const minStartTime = 0;
+                    const maxClipDuration = mediaClip.endTime - minStartTime;
+                    const currentDuration = newEnd - newStart;
+                    if (currentDuration > maxClipDuration) {
+                        newStart = newEnd - maxClipDuration;
+                        setIsAtLimit('left');
+                    }
+                } else { // Resizing right
+                    const maxEndTime = mediaClip.sourceDuration;
+                    const maxClipDuration = maxEndTime - mediaClip.startTime;
+                    const currentDuration = newEnd - newStart;
+                    if (currentDuration > maxClipDuration) {
+                        newEnd = newStart + maxClipDuration;
+                        setIsAtLimit('right');
+                    }
                 }
             }
         }
@@ -316,29 +319,32 @@ export function useTimelineElement<T extends ElementType>({
 
             if (elementType === 'media') {
                 const mediaClip = clip as MediaFile;
-                let newStartTime = mediaClip.startTime;
-                let newEndTime = mediaClip.endTime;
+                // 비디오와 오디오만 startTime/endTime 업데이트 (이미지는 제외)
+                if (mediaClip.type === 'video' || mediaClip.type === 'audio') {
+                    let newStartTime = mediaClip.startTime;
+                    let newEndTime = mediaClip.endTime;
 
-                const positionDelta = newStart - mediaClip.positionStart;
-                if (resizeDirection.current === -1) { // left handle
-                     newStartTime = mediaClip.startTime + positionDelta;
-                }
-                
-                const durationDelta = (newEnd - newStart) - (mediaClip.positionEnd - mediaClip.positionStart);
-                newEndTime = newStartTime + (mediaClip.endTime - mediaClip.startTime) + durationDelta;
+                    const positionDelta = newStart - mediaClip.positionStart;
+                    if (resizeDirection.current === -1) { // left handle
+                         newStartTime = mediaClip.startTime + positionDelta;
+                    }
+                    
+                    const durationDelta = (newEnd - newStart) - (mediaClip.positionEnd - mediaClip.positionStart);
+                    newEndTime = newStartTime + (mediaClip.endTime - mediaClip.startTime) + durationDelta;
 
-                if (newStartTime < 0) {
-                    newStartTime = 0;
-                }
-                if (newEndTime > mediaClip.sourceDuration) {
-                    newEndTime = mediaClip.sourceDuration;
-                }
+                    if (newStartTime < 0) {
+                        newStartTime = 0;
+                    }
+                    if (newEndTime > mediaClip.sourceDuration) {
+                        newEndTime = mediaClip.sourceDuration;
+                    }
 
-                updatedClip = {
-                    ...updatedClip,
-                    startTime: newStartTime,
-                    endTime: newEndTime,
-                } as MediaFile;
+                    updatedClip = {
+                        ...updatedClip,
+                        startTime: newStartTime,
+                        endTime: newEndTime,
+                    } as MediaFile;
+                }
             }
 
             if (elementType === 'media') {
