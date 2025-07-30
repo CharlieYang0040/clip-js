@@ -21,7 +21,10 @@ const GlobalKeyHandler = ({ handleDuplicate, handleSplit, handleDelete }: Global
         duration, 
         timelineZoom,
         history,
-        future
+        future,
+        activeElements,
+        mediaFiles,
+        textElements
     } = useAppSelector((state) => state.projectState);
     
     const [hasInteracted, setHasInteracted] = useState(false);
@@ -59,7 +62,72 @@ const GlobalKeyHandler = ({ handleDuplicate, handleSplit, handleDelete }: Global
         } else {
             toast.error('Nothing to redo');
         }
-    }, [dispatch, future.length]);
+    }, [future.length, dispatch]);
+
+    const handleFitToElements = useCallback(() => {
+        const allElements = [...mediaFiles, ...textElements];
+        
+        let targetElements;
+        let messagePrefix;
+        
+        if (activeElements.length === 0) {
+            // 선택된 엘리먼트가 없으면 모든 엘리먼트를 대상으로 함
+            if (allElements.length === 0) {
+                toast.error('No elements in timeline');
+                return;
+            }
+            targetElements = allElements;
+            messagePrefix = 'Zoomed to fit all';
+        } else {
+            // 선택된 엘리먼트들만 대상으로 함
+            targetElements = allElements.filter(el => 
+                activeElements.some(activeEl => activeEl.id === el.id)
+            );
+            
+            if (targetElements.length === 0) {
+                toast.error('Selected elements not found');
+                return;
+            }
+            messagePrefix = 'Zoomed to fit selected';
+        }
+
+        const minStart = Math.min(...targetElements.map(el => el.positionStart));
+        const maxEnd = Math.max(...targetElements.map(el => el.positionEnd));
+        const totalDuration = maxEnd - minStart;
+        const centerTime = minStart + (totalDuration / 2);
+
+        if (totalDuration <= 0) {
+            toast.error('Invalid element range');
+            return;
+        }
+
+        // 현재 타임라인 viewport 크기를 실제 DOM에서 가져오기
+        const timelineContainer = document.querySelector('[data-timeline-viewport]') as HTMLElement;
+        let viewportWidth = window.innerWidth - 144 - 40; // 기본값 (좌측 패널 - 여백)
+        
+        if (timelineContainer) {
+            viewportWidth = timelineContainer.clientWidth;
+        }
+
+        // 적절한 줌 레벨 계산 (여유를 위해 10% 추가)
+        const targetZoom = (viewportWidth * 0.9) / totalDuration;
+        
+        // 줌 레벨 제한 (1 ~ 1000)
+        const clampedZoom = Math.max(1, Math.min(1000, targetZoom));
+
+        dispatch(setTimelineZoom(clampedZoom));
+        
+        // 줌 적용 후 선택된 엘리먼트들이 viewport 중앙에 오도록 스크롤 조정
+        setTimeout(() => {
+            if (timelineContainer) {
+                const centerPositionPx = centerTime * clampedZoom;
+                const scrollLeft = centerPositionPx - (viewportWidth / 2);
+                timelineContainer.scrollLeft = Math.max(0, scrollLeft);
+            }
+        }, 0); // 줌 적용이 완료된 후 스크롤 조정
+        
+        toast.success(`${messagePrefix} ${targetElements.length} element(s)`);
+    }, [activeElements, mediaFiles, textElements, dispatch]);
 
     const handleGoToStart = useCallback(() => {
         dispatch(setCurrentTime(0));
@@ -198,6 +266,10 @@ const GlobalKeyHandler = ({ handleDuplicate, handleSplit, handleDelete }: Global
                     const prevTime = currentTimeRef.current - .01 < 0 ? 0 : currentTimeRef.current - .01;
                     dispatch(setCurrentTime(prevTime));
                     break;
+                case 'KeyF':
+                    e.preventDefault();
+                    handleFitToElements();
+                    break;
             }
         };
 
@@ -217,7 +289,8 @@ const GlobalKeyHandler = ({ handleDuplicate, handleSplit, handleDelete }: Global
         handleGoToStart,
         handleGoToEnd,
         handleZoomIn,
-        handleZoomOut
+        handleZoomOut,
+        handleFitToElements
     ]);
 
     return null;

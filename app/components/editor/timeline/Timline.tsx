@@ -583,6 +583,7 @@ export const Timeline = () => {
                 <div
                     className="relative overflow-x-auto w-full bg-[#1E1D21] z-10"
                     ref={timelineRef}
+                    data-timeline-viewport
                 >
                     <div
                         onClick={(e) => {
