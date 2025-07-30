@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useAppSelector, useAppDispatch } from '@/app/store';
-import { toggleActiveElement, setMediaFiles, setTextElements, setDraggingElement, setDragOverTrackId, setCurrentTime, setSnapLine, setPreviewTime, clearPreviewTime } from '@/app/store/slices/projectSlice';
+import { toggleActiveElement, setMediaFiles, setTextElements, updateMediaFiles_INTERNAL, updateTextElements_INTERNAL, setDraggingElement, setDragOverTrackId, setCurrentTime, setSnapLine, setPreviewTime, clearPreviewTime } from '@/app/store/slices/projectSlice';
 import { MediaFile, TextElement, SelectedElement } from '@/app/types';
 import { OnDrag, OnDragStart, OnResize, OnResizeStart, OnResizeEnd, OnDragEnd } from 'react-moveable';
 import { throttle } from 'lodash';
@@ -32,6 +32,7 @@ export function useTimelineElement<T extends ElementType>({
     const resizeStartStates = useRef<{ left: number, width: number } | null>(null);
     const metaKeyPressed = useRef(false);
     const resizeDirection = useRef<number>(0);
+    const dragStartRecorded = useRef(false);
 
     const stateRef = useRef({ mediaFiles, textElements, tracks, currentTime, dragOverTrackId, isSnappingEnabled });
     useEffect(() => {
@@ -129,10 +130,10 @@ export function useTimelineElement<T extends ElementType>({
         const textToUpdate = elementsToUpdate.filter(el => !('type' in el)) as TextElement[];
 
         if (mediaToUpdate.length > 0) {
-            dispatch(setMediaFiles(latestMedia.map(f => mediaToUpdate.find(u => u.id === f.id) || f)));
+            dispatch(updateMediaFiles_INTERNAL(latestMedia.map(f => mediaToUpdate.find(u => u.id === f.id) || f)));
         }
         if (textToUpdate.length > 0) {
-            dispatch(setTextElements(latestText.map(t => textToUpdate.find(u => u.id === t.id) || t)));
+            dispatch(updateTextElements_INTERNAL(latestText.map(t => textToUpdate.find(u => u.id === t.id) || t)));
         }
     }, 16), [getSnapPoints, findSnap, throttledSetSnapLine, dragStates, clip.id, timelineZoom, dispatch]);
 
@@ -154,6 +155,9 @@ export function useTimelineElement<T extends ElementType>({
 
     const onDragStart = (e: OnDragStart) => {
         const { clientX, inputEvent } = e;
+        
+        dragStartRecorded.current = false;
+        
         dispatch(setDraggingElement({ clip, elementType }));
         metaKeyPressed.current = inputEvent.ctrlKey || inputEvent.shiftKey;
         const newDragStates: typeof dragStates = {};
@@ -177,6 +181,13 @@ export function useTimelineElement<T extends ElementType>({
 
     const onDrag = (e: OnDrag) => {
         const { clientY, dist } = e;
+
+        // 첫 번째 드래그 이벤트에서만 히스토리 기록
+        if (!dragStartRecorded.current) {
+            dispatch(setMediaFiles([...mediaFiles]));
+            dispatch(setTextElements([...textElements]));
+            dragStartRecorded.current = true;
+        }
 
         throttledUpdatePositions(dist);
 
@@ -204,6 +215,7 @@ export function useTimelineElement<T extends ElementType>({
             }));
         }
         
+        dragStartRecorded.current = false;
         setDragStates({});
         dispatch(setDraggingElement(null));
         dispatch(setDragOverTrackId(null));

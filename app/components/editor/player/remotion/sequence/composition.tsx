@@ -74,8 +74,13 @@ const Composition = () => {
     return (
         <>
             {sortedElements.map((item) => {
-                if ('src' in item && !item.src) return null;
                 const { elementType, ...trackItem } = item;
+                
+                // src가 필요한 요소들은 src가 없으면 렌더링하지 않음
+                if ((elementType === 'video' || elementType === 'image' || elementType === 'audio') && 
+                    ('src' in item && (!item.src || item.src.trim() === ''))) {
+                    return null;
+                }
                 
                 const track = tracks.find(t => t.id === item.trackId);
                 if (!track) return null;

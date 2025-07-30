@@ -26,7 +26,7 @@ export const SequenceItem: Record<
     video: (item: MediaFile & { zIndex: number, isMuted?: boolean }, options: SequenceItemOptions) => {
         const { fps } = options;
 
-        if (item.isMuted) {
+        if (item.isMuted || !item.src || item.src.trim() === '') {
             return null;
         }
 
@@ -82,8 +82,11 @@ export const SequenceItem: Record<
                         startFrom={(trim.from) * fps}
                         endAt={(trim.to) * fps + REMOTION_SAFE_FRAME}
                         playbackRate={playbackRate}
-                        src={item.src || ""}
+                        src={item.src}
                         volume={item.isMuted ? 0 : (item.volume !== undefined ? item.volume / 100 : 1)}
+                        onError={(error) => {
+                            console.warn('Video playback error (possibly due to invalid blob URL):', error);
+                        }}
                         style={{
                             pointerEvents: "none",
                             width: '100%',
@@ -156,7 +159,7 @@ export const SequenceItem: Record<
     image: (item: MediaFile & { zIndex: number, isMuted?: boolean }, options: SequenceItemOptions) => {
         const { fps } = options;
 
-        if (item.isMuted) {
+        if (item.isMuted || !item.src || item.src.trim() === '') {
             return null;
         }
 
@@ -209,7 +212,10 @@ export const SequenceItem: Record<
                             zIndex: item.zIndex || 0,
                         }}
                         data-id={item.id}
-                        src={item.src || ""}
+                        src={item.src}
+                        onError={(error) => {
+                            console.warn('Image load error (possibly due to invalid blob URL):', error);
+                        }}
                     />
                 </AbsoluteFill>
             </Sequence>
@@ -217,6 +223,11 @@ export const SequenceItem: Record<
     },
     audio: (item: MediaFile & { isMuted?: boolean }, options: SequenceItemOptions) => {
         const { fps } = options;
+        
+        if (item.isMuted || !item.src || item.src.trim() === '') {
+            return null;
+        }
+        
         const playbackRate = item.playbackSpeed || 1;
         const { from, durationInFrames } = calculateFrames(
             {
@@ -245,8 +256,11 @@ export const SequenceItem: Record<
                         startFrom={(trim.from) * fps}
                         endAt={(trim.to) * fps + REMOTION_SAFE_FRAME}
                         playbackRate={playbackRate}
-                        src={item.src || ""}
+                        src={item.src}
                         volume={item.isMuted ? 0 : (item.volume !== undefined ? item.volume / 100 : 1)}
+                        onError={(error) => {
+                            console.warn('Audio playback error (possibly due to invalid blob URL):', error);
+                        }}
                     />
                 </AbsoluteFill>
             </Sequence>

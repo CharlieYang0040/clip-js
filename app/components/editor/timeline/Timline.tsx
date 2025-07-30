@@ -149,6 +149,7 @@ export const Timeline = () => {
 
     const handleDragEnd = useCallback(() => {
         setIsDraggingMarker(false);
+        wasDragging.current = false;
     }, []);
 
     useEffect(() => {
@@ -268,16 +269,26 @@ export const Timeline = () => {
             if (activeElement.type === 'media') {
                 const elementToDuplicate = newMediaFiles.find(e => e.id === activeElement.id);
                 if (elementToDuplicate) {
-                    const duplicatedElement = { ...elementToDuplicate, id: crypto.randomUUID() };
-                    const index = newMediaFiles.findIndex(e => e.id === activeElement.id);
-                    newMediaFiles.splice(index + 1, 0, duplicatedElement);
+                    const duration = elementToDuplicate.positionEnd - elementToDuplicate.positionStart;
+                    const duplicatedElement = { 
+                        ...elementToDuplicate, 
+                        id: crypto.randomUUID(),
+                        positionStart: elementToDuplicate.positionEnd,
+                        positionEnd: elementToDuplicate.positionEnd + duration
+                    };
+                    newMediaFiles.push(duplicatedElement);
                 }
             } else if (activeElement.type === 'text') {
                 const elementToDuplicate = newTextElements.find(e => e.id === activeElement.id);
                 if (elementToDuplicate) {
-                    const duplicatedElement = { ...elementToDuplicate, id: crypto.randomUUID() };
-                    const index = newTextElements.findIndex(e => e.id === activeElement.id);
-                    newTextElements.splice(index + 1, 0, duplicatedElement);
+                    const duration = elementToDuplicate.positionEnd - elementToDuplicate.positionStart;
+                    const duplicatedElement = { 
+                        ...elementToDuplicate, 
+                        id: crypto.randomUUID(),
+                        positionStart: elementToDuplicate.positionEnd,
+                        positionEnd: elementToDuplicate.positionEnd + duration
+                    };
+                    newTextElements.push(duplicatedElement);
                 }
             }
         });
