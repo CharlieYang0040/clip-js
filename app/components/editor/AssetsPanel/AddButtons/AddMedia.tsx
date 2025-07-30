@@ -5,10 +5,11 @@ import { setMediaFiles } from "../../../../store/slices/projectSlice";
 import { storeFile } from "../../../../store";
 import { categorizeFile } from "../../../../utils/utils";
 import Image from 'next/image';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
+
 
 export default function AddMedia({ fileId }: { fileId: string }) {
-    const { mediaFiles, tracks } = useAppSelector((state) => state.projectState);
+    const { mediaFiles, tracks, currentTime } = useAppSelector((state) => state.projectState);
     const dispatch = useAppDispatch();
 
     const handleFileChange = async () => {
@@ -31,11 +32,6 @@ export default function AddMedia({ fileId }: { fileId: string }) {
             return;
         }
 
-        const relevantClips = mediaFiles.filter(clip => clip.trackId === targetTrack.id);
-        const lastEnd = relevantClips.length > 0
-            ? Math.max(...relevantClips.map(f => f.positionEnd))
-            : 0;
-
         let duration = 5; // Default for images
         let width = 1920; // Default width, fallback
         let height = 1080; // Default height, fallback
@@ -44,40 +40,42 @@ export default function AddMedia({ fileId }: { fileId: string }) {
 
         try {
             if (mediaType === 'video') {
-                const video = await new Promise<HTMLVideoElement>((resolve, reject) => {
-                    const videoElement = document.createElement('video');
-                    videoElement.onloadedmetadata = () => resolve(videoElement);
-                    videoElement.onerror = (e) => reject(`Could not read metadata from ${file.name}`);
-                    videoElement.src = objectUrl;
+                const video = document.createElement('video');
+                video.src = objectUrl;
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        duration = video.duration;
+                        width = video.videoWidth;
+                        height = video.videoHeight;
+                        resolve(null);
+                    };
                 });
-                duration = video.duration;
-                width = video.videoWidth;
-                height = video.videoHeight;
+                video.remove();
             } else if (mediaType === 'audio') {
-                const audio = await new Promise<HTMLAudioElement>((resolve, reject) => {
-                    const audioElement = document.createElement('audio');
-                    audioElement.onloadedmetadata = () => resolve(audioElement);
-                    audioElement.onerror = (e) => reject(`Could not read metadata from ${file.name}`);
-                    audioElement.src = objectUrl;
+                const audio = document.createElement('audio');
+                audio.src = objectUrl;
+                await new Promise((resolve) => {
+                    audio.onloadedmetadata = () => {
+                        duration = audio.duration;
+                        resolve(null);
+                    };
                 });
-                duration = audio.duration;
-                width = 0;
-                height = 0;
+                audio.remove();
             } else if (mediaType === 'image') {
-                const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-                    const imgElement = new window.Image();
-                    imgElement.onload = () => resolve(imgElement);
-                    imgElement.onerror = (e) => reject(`Could not read dimensions from ${file.name}`);
-                    imgElement.src = objectUrl;
+                const img = document.createElement('img');
+                img.src = objectUrl;
+                await new Promise((resolve) => {
+                    img.onload = () => {
+                        width = img.naturalWidth;
+                        height = img.naturalHeight;
+                        resolve(null);
+                    };
                 });
-                width = img.naturalWidth;
-                height = img.naturalHeight;
+                img.remove();
             }
         } catch (error) {
-            toast.error(String(error));
-            console.error("Error processing media:", error);
-            URL.revokeObjectURL(objectUrl); // Clean up
-            return;
+            console.error("Error loading media metadata:", error);
+            toast.error("Failed to load media metadata. Using default values.");
         }
 
         const newMediaFile = {
@@ -87,13 +85,15 @@ export default function AddMedia({ fileId }: { fileId: string }) {
             src: objectUrl,
             type: mediaType,
             trackId: targetTrack.id,
-            positionStart: lastEnd,
-            positionEnd: lastEnd + duration,
+            positionStart: currentTime,
+            positionEnd: currentTime + duration,
             startTime: 0,
             endTime: duration,
             sourceDuration: duration,
             x: 0,
             y: 0,
+            width,
+            height,
             layerOrder: 0,
             opacity: 100,
             volume: mediaType === 'audio' || mediaType === 'video' ? 100 : 0,

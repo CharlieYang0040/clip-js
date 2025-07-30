@@ -273,8 +273,8 @@ export const Timeline = () => {
                     const duplicatedElement = { 
                         ...elementToDuplicate, 
                         id: crypto.randomUUID(),
-                        positionStart: elementToDuplicate.positionEnd,
-                        positionEnd: elementToDuplicate.positionEnd + duration
+                        positionStart: currentTime,
+                        positionEnd: currentTime + duration
                     };
                     newMediaFiles.push(duplicatedElement);
                 }
@@ -285,8 +285,8 @@ export const Timeline = () => {
                     const duplicatedElement = { 
                         ...elementToDuplicate, 
                         id: crypto.randomUUID(),
-                        positionStart: elementToDuplicate.positionEnd,
-                        positionEnd: elementToDuplicate.positionEnd + duration
+                        positionStart: currentTime,
+                        positionEnd: currentTime + duration
                     };
                     newTextElements.push(duplicatedElement);
                 }

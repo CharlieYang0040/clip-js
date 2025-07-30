@@ -15,9 +15,10 @@ export default function AssetItem({ fileId }: { fileId: string }) {
     const [file, setFile] = useState<File | null>(null);
     const [mediaType, setMediaType] = useState<MediaType>('unknown');
     const [thumbnail, setThumbnail] = useState<string | null>(null);
-    const [duration, setDuration] = useState<number>(0);
+    const [duration, setDuration] = useState(0);
+
     const dispatch = useAppDispatch();
-    const { tracks, mediaFiles } = useAppSelector((state: RootState) => state.projectState);
+    const { tracks, mediaFiles, currentTime } = useAppSelector((state: RootState) => state.projectState);
 
     useEffect(() => {
         const fetchFile = async () => {
@@ -78,11 +79,7 @@ export default function AssetItem({ fileId }: { fileId: string }) {
             return;
         }
 
-        const lastMediaFile = mediaFiles
-            .filter((mf: MediaFile) => mf.trackId === targetTrack.id)
-            .sort((a: MediaFile, b: MediaFile) => b.positionEnd - a.positionEnd)[0];
-
-        const positionStart = lastMediaFile ? lastMediaFile.positionEnd : 0;
+        const positionStart = currentTime;
         const positionEnd = positionStart + duration;
 
         const newMediaFile: MediaFile = {
@@ -98,6 +95,8 @@ export default function AssetItem({ fileId }: { fileId: string }) {
             sourceDuration: duration,
             layerOrder: 0,
             x: 0, y: 0, opacity: 100,
+            width: 1920, height: 1080,
+            volume: mediaType === 'audio' || mediaType === 'video' ? 100 : 0,
         };
 
         dispatch(setMediaFiles([...mediaFiles, newMediaFile]));
@@ -191,4 +190,4 @@ const getMediaDuration = (mediaUrl: string, type: 'video' | 'audio'): Promise<nu
         media.onerror = (e) => reject(`Error loading media for duration: ${e}`);
         media.src = mediaUrl;
     });
-}; 
+};
