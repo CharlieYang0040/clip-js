@@ -6,7 +6,7 @@ import { TextElement } from '../../../types';
 import { useAppDispatch } from '../../../store';
 
 export default function TextProperties() {
-    const { textElements, activeElements } = useAppSelector((state) => state.projectState);
+    const { textElements, activeElements, resolution } = useAppSelector((state) => state.projectState);
     const activeTextElement = activeElements.find(el => el.type === 'text');
     const textElement = textElements.find(el => el.id === activeTextElement?.id);
     const dispatch = useAppDispatch();
@@ -15,6 +15,33 @@ export default function TextProperties() {
         dispatch(setTextElements(textElements.map(text =>
             text.id === id ? { ...text, ...updates } : text
         )));
+    };
+
+    const handlePresetChange = (preset: string) => {
+        if (!textElement) return;
+
+        const { width, height } = resolution;
+        let newX = textElement.x || 0;
+        let newY = textElement.y || 0;
+
+        switch (preset) {
+            case 'top-center':
+                newX = width / 2;
+                newY = height * 0.1;
+                break;
+            case 'center':
+                newX = width / 2;
+                newY = height / 2;
+                break;
+            case 'bottom-center':
+                newX = width / 2;
+                newY = height * 0.9;
+                break;
+            default:
+                return;
+        }
+
+        onUpdateText(textElement.id, { x: newX, y: newY });
     };
 
     if (!textElement) return null;
@@ -124,6 +151,19 @@ export default function TextProperties() {
                             </select>
                         </div>
                     </div>
+                </div>
+                {/* Position Preset */}
+                <div className="space-y-2">
+                    <h4 className="font-semibold">Position Preset</h4>
+                    <select
+                        onChange={(e) => handlePresetChange(e.target.value)}
+                        className="w-full p-2 bg-darkSurfacePrimary border border-white border-opacity-10 shadow-md text-white rounded focus:outline-none focus:ring-2 focus:ring-white-500 focus:border-white-500"
+                    >
+                        <option value="">Select Preset</option>
+                        <option value="top-center">Top Center</option>
+                        <option value="center">Center</option>
+                        <option value="bottom-center">Bottom Center</option>
+                    </select>
                 </div>
                 {/* Style Properties */}
                 <div className="space-y-2">
